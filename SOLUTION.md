@@ -1,117 +1,82 @@
 # Solution - Nightwave Take-Home
 
+## Time and Tools
+
+Approximately 8–10 hours across two sessions. I used Claude Code (Anthropic's agentic CLI) substantively throughout — for code generation, test scaffolding, iteration on the graph seeder, and debugging the synthesizer JSON parsing edge cases. The architecture decisions, eval design, and citation discipline model were mine; Claude Code was my pair programmer on implementation.
+
 ## Product Shape
 
-I built this as a citation-governed investigative reasoning pipeline, not a loose chatbot.
+A citation-governed investigative reasoning pipeline. The product constraint: a detective must be able to ask a question and get an answer whose claims trace back to case evidence. That requires two capabilities working together — raw evidence retrieval for facts and excerpts, and graph reasoning for entities, leads, hypotheses, and relationships.
 
-The important product constraint is that a detective should be able to ask a question and get an answer whose claims can be traced back to case evidence. That means the system needs two capabilities working together:
+## Why Not a Single ReAct Loop?
 
-- raw evidence retrieval for facts and excerpts
-- graph reasoning for entities, leads, hypotheses, events, and relationships
+The README warns against multi-agent theater, and I want to defend the choice directly.
 
-The default eval now runs the multi-agent pipeline. The original single-agent ReAct harness remains available with `NIGHTWAVE_ARCHITECTURE=single`, but the product path is:
+A single ReAct loop with three tools can answer all three questions and score 1.0 on the deterministic eval. The eval doesn't distinguish architectures on these questions because all generated citations happened to be valid on both runs.
 
-1. Retriever agent
-2. Graph agent
-3. Synthesizer agent
-4. Critic agent
-5. Deterministic eval
+The reason multi-agent is correct here is **citation circuit closure**. A ReAct loop that calls `search_evidence` and `submit_answer` produces answers, but no agent validates that the `evidence_id` values actually exist in the case data before they reach the detective. The critic closes that circuit. In production — where LLM outputs vary across runs and cases — the critic is the difference between a system that provably cites real evidence and one that hopes the LLM got it right. This matters in an investigative context: a hallucinated citation ID in a disclosure memo is a Brady problem, not a UX bug.
 
-This is not multi-agent for theater. Each agent owns a distinct control surface: recall, relationship traversal, answer composition, and validation.
+The graph agent is the other non-optional piece. Hypothesis confidence scores (hyp-josh-coconspirator at 0.47, hyp-josh-equals-lawrence at 0.34) require structured traversal over entities and relationships. BM25 search over a flat text index can retrieve the text that names them, but not reason about their relative status or the edges between them.
+
+The pipeline:
+
+1. Retriever agent — hybrid BM25 + dense embedding search with reciprocal rank fusion
+2. Graph agent — typed traversal over entities, relationships, events, leads, hypotheses
+3. Synthesizer agent — structured JSON answer with calibrated confidence
+4. Critic agent — validates every citation before it reaches the detective
+
+The original single-agent ReAct harness remains available with `NIGHTWAVE_ARCHITECTURE=single`.
 
 ## Architecture
 
-### Retriever Agent
+### Retriever
 
-The retriever uses hybrid retrieval when dependencies are available:
-
-- BM25-ish lexical search over parsed evidence chunks
-- dense embeddings via `sentence-transformers`
-- reciprocal rank fusion for reranking
-
-For a clean take-home environment, dense retrieval degrades to BM25 if `numpy` or the embedding model is unavailable. That keeps the submission runnable without network access or model downloads.
+Hybrid retrieval when dependencies are available: BM25 lexical search over parsed evidence chunks, dense embeddings via `sentence-transformers`, reciprocal rank fusion for reranking. Degrades to BM25 if `numpy` or the model is unavailable — keeps the submission runnable without network access or model downloads.
 
 ### Graph Agent
 
-The graph agent is designed around Neo4j, with an in-memory fallback.
+Designed around Neo4j with an in-memory fallback. Neo4j fits because the case state is relational: Madison → Josh → Session, Madison → Kyle Lawrence → Snapchat, hypotheses → supporting evidence. The seeder uses idempotent `MERGE` statements and creates `SUPPORTS` edges from `lead.source_hypothesis_id`. Final industrial run used Colima + Docker Compose to start Neo4j 5 Community; seeded the graph; verified node/edge counts; ran the eval with `graph_mode: neo4j`.
 
-Neo4j is the right fit here because the case state is relational:
+### Synthesizer
 
-- Madison -> Josh -> Session
-- Madison -> Kyle Lawrence -> Snapchat
-- hypotheses -> supporting evidence
-- leads -> linked entities/events/hypotheses
-- events -> entities -> locations
+Receives only retrieved evidence chunks and graph context. Uses Claude with `temperature=0` and enforces structured JSON output via a strict system prompt. Output schema (`response`, `confidence`, `reasoning`, `citations`) is validated and sanitized — handling LLM edge cases like invalid `\'` apostrophe escapes, markdown fences, and truncated responses. On parse failure, raw output is returned with degraded confidence rather than crashing.
 
-The code includes an idempotent Neo4j seeder that maps case data into nodes for entities, events, leads, hypotheses, locations, and evidence. It also creates relationship edges, citation edges, and hypothesis-to-lead `SUPPORTS` edges derived from `lead.source_hypothesis_id`. If Neo4j is unavailable, the graph agent transparently falls back to the same case graph in memory.
+### Critic
 
-The final industrial run used Colima + Docker Compose to start Neo4j 5 Community, seeded the graph, verified node/edge counts, and ran the eval with `graph_mode: neo4j`.
-
-### Synthesizer Agent
-
-The synthesizer receives only retrieved evidence chunks and graph context. Its job is to write a concise answer with calibrated confidence.
-
-If `ANTHROPIC_API_KEY` is present, the synthesizer uses Claude with `temperature=0` and enforces structured JSON output via a strict system prompt. The output schema (`response`, `confidence`, `reasoning`, `citations`) is validated and sanitized before parsing — handling LLM edge cases like invalid `\'` apostrophe escapes, markdown fences, and truncated responses. If parsing fails completely, the raw output is returned with a degraded confidence score rather than crashing.
-
-### Critic Agent
-
-The critic is the most important product-grade addition.
-
-It validates:
-
-- cited `evidence_id` exists in `case_data.json`
-- excerpt is grounded in the source text, parsed PDF text, evidence description, or AI summary
-- confidence is not over-calibrated when graph hypotheses conflict
-
-Earlier versions leaked critic warnings into the user-facing answer. That is unacceptable product behavior, so critic feedback now remains internal trace data. If the critic cannot validate the answer after retry, confidence is capped instead of polluting the response.
+Validates that every `evidence_id` exists in `case_data.json`, that excerpts are grounded in source text or evidence metadata, and that confidence is not over-calibrated when graph hypotheses conflict. Critic feedback stays internal trace data — earlier versions leaked warnings into the user-facing answer, which is unacceptable product behavior. If validation fails after retry, confidence is capped rather than the response polluted.
 
 ## Tool Choices
 
-The core tools are:
-
-- `search_evidence`: lexical search over parsed raw evidence, PDF text when available, and metadata summaries
+- `search_evidence`: lexical search over parsed raw evidence, PDF text when available, metadata summaries
 - `get_entity`: entity lookup by id/name/alias with citations attached
-- `query_graph`: typed graph traversal over entities, relationships, events, leads, and hypotheses
+- `query_graph`: typed graph traversal over entities, relationships, events, leads, hypotheses
 - `list_citations`: artifact-to-citation lookup
 - `submit_answer`: structured final answer contract for the single-agent baseline
 
-For the multi-agent pipeline, the same underlying case index is reused by the retriever, graph agent, and critic.
-
 ## Confidence Model
-
-Confidence is calibrated by question type:
 
 | Question type | Expected range | Rationale |
 |---|---:|---|
-| Single-source official document | 0.85-0.97 | Q1 is directly answered by the Ohio AG alert |
-| Conflicting identity reasoning | 0.45-0.70 | Q2 has two active hypotheses and unresolved Session identity |
-| Investigative planning | 0.50-0.78 | Q3 ranks actions from case state, but outcomes are uncertain |
+| Single-source official document | 0.85–0.97 | Q1 directly answered by the Ohio AG alert |
+| Conflicting identity reasoning | 0.45–0.70 | Q2 has two active hypotheses; Session identity unresolved |
+| Investigative planning | 0.50–0.78 | Q3 ranks actions from case state; outcomes uncertain |
 
-Final live LLM confidences:
+Live LLM confidences: Q1 0.93, Q2 0.54, Q3 0.68.
 
-- Q1: 0.93
-- Q2: 0.54
-- Q3: 0.72
-
-Q2 is intentionally moderate. The system should not claim certainty where the case graph itself says the identity question is unresolved.
+Q2 is intentionally moderate. The system should not claim certainty where the case graph keeps both identity hypotheses active.
 
 ## Eval Methodology
-
-The eval scores four things:
 
 | Metric | Weight | Purpose |
 |---|---:|---|
 | Correctness | 35% | Required facts, entities, topics, and action count |
 | Citation grounding | 30% | Every citation must resolve to real case evidence |
-| Must-cite coverage | 20% | Required evidence or hypothesis ids must appear |
+| Must-cite coverage | 20% | Required evidence or hypothesis IDs must appear |
 | Confidence calibration | 15% | Confidence must match the expected uncertainty band |
 
-Any hallucinated citation id triggers a hard penalty. Raw answers are written to `starter/raw_answers.json`, and reports are written to:
+A hallucinated citation ID triggers a hard penalty. Raw answers are written to `raw_answers.json`; reports to `eval_report.json` and `eval_report_multiagent.json`.
 
-- `starter/eval_report.json`
-- `starter/eval_report_multiagent.json`
-
-Final eval result:
+Final result:
 
 ```text
 overall_score: 1.000
@@ -120,7 +85,7 @@ architecture: multiagent
 graph_mode: neo4j
 ```
 
-Additional validation:
+Validation:
 
 ```text
 ruff check .                         # passed
@@ -144,34 +109,16 @@ Test breakdown (10 files, 136 deterministic tests):
 | `test_no_hardcoding.py` | 3 | AST scan: no entity IDs, Cypher args, or platform keywords in dispatch lists |
 | `test_llm_adapter.py` | 19 | Protocol conformance, factory dispatch for all 5 providers, model defaults, env-var overrides, missing-key errors |
 
-## Answers Produced
-
-Q1 identifies the clothing from the Ohio AG alert: black Champion hoodie, camo pants, black shoes, black backpack, and white grocery bag.
-
-Q2 concludes that Lawrence is the confirmed Snapchat offender, while Josh is a separate or at least unresolved Session contact. The answer cites both the DOJ/Lawrence evidence and the Josh/Session reporting, then calibrates confidence to 0.54 because the graph keeps both identity hypotheses active.
-
-Q3 ranks the top three actions from the active critical leads:
-
-1. `lead-session-forensic`
-2. `lead-snapchat-subpoena`
-3. `lead-intown-surveillance`
-
-Those map to `hyp-josh-coconspirator`, `hyp-additional-victims`, `evt-feb13-meet-josh`, and `evt-feb13-departure`.
+Adversarial eval (`questions_adversarial.json`) covers 6 cases: out-of-scope date, hallucinated entity, fake evidence probe, prompt injection, pre-case fabrication, leading question. The structural guards — hallucination blocking, confidence capping, prompt injection resistance — are all deterministically tested. Automatically scoring LLM refusal prose against `acceptable_responses` / `forbidden_phrases` would require an LLM judge and add complexity I deliberately kept out of scope.
 
 ## Provider-Neutral LLM Adapter
 
-The synthesizer dispatches through a thin adapter layer (`nightwave/multiagent/llm.py`) rather than calling Anthropic directly. Two env vars control it:
+The synthesizer dispatches through a thin adapter (`nightwave/multiagent/llm.py`). Two env vars control it:
 
 ```bash
-NIGHTWAVE_LLM_PROVIDER=anthropic   # default
-NIGHTWAVE_LLM_PROVIDER=openai      # OpenAI Chat Completions
-NIGHTWAVE_LLM_PROVIDER=gemini      # Google Generative AI
-NIGHTWAVE_LLM_PROVIDER=bedrock     # AWS Bedrock Converse API
-NIGHTWAVE_LLM_PROVIDER=ollama      # Ollama (local, OpenAI-compatible)
+NIGHTWAVE_LLM_PROVIDER=anthropic   # default; also: openai, gemini, bedrock, ollama
 NIGHTWAVE_LLM_MODEL=gpt-4o         # overrides per-provider default
 ```
-
-Provider credentials and defaults:
 
 | Provider | Key env var | Default model |
 |---|---|---|
@@ -181,48 +128,18 @@ Provider credentials and defaults:
 | bedrock | boto3 credential chain | `anthropic.claude-3-5-sonnet-20241022-v2:0` |
 | ollama | none (`OLLAMA_BASE_URL` for endpoint) | `llama3.2` |
 
-The adapter contract is intentionally small:
+None of the adapters use native structured output modes. All five go through the same prompt-only JSON enforcement and `_extract_json` fallback, so the synthesizer validation path and critic work identically across providers.
 
-```python
-def chat(system, messages, max_tokens, temperature) -> (text, input_tokens, output_tokens)
-```
+## Scalability Bottlenecks
 
-Retry logic, cost tracking, and JSON extraction all live in the synthesizer, not the adapter. Switching providers is a one-line env change — the rest of the pipeline is provider-blind.
+**1. Module-level case singleton.** `_INDEX` is loaded once from a single `case_data.json`. Scaling to 100 cases requires a `CaseStore` that fetches by `case_id` from Postgres, lazy-loaded per request.
 
-One deliberate decision: none of the adapters use native structured output modes (`response_format`, `response_schema`, etc.). All five providers go through the same prompt-only JSON enforcement and `_extract_json` fallback. This keeps the synthesizer's validation path and the critic identical across providers — the tests work unchanged regardless of which LLM is active.
+**2. `asyncio.new_event_loop()` per question.** The orchestrator creates and discards an event loop per question. In a server context this needs to run inside a FastAPI background task queue, not spin up a new loop per call.
 
-Ollama reuses the `openai` SDK with `base_url="http://localhost:11434/v1"` and `api_key="ollama"` — no separate HTTP client needed. Bedrock uses the Converse API, which speaks the same message schema regardless of the underlying model family (Claude, Titan, Llama, Mistral).
+**3. No streaming.** The pipeline returns a full `Answer` after all four stages complete. The SSE contract in `schema/agent/sherlock.types.ts` already defines `sherlock_thinking`, `sherlock_tool_call`, and `sherlock_complete` events — wiring the orchestrator to emit SSE per step is the next integration for the production UI.
 
-## Where the Architecture Breaks at 100 Cases
+## What I Would Do Next
 
-The honest bottlenecks, in order of severity:
-
-**1. Module-level case singleton.** `_INDEX` is loaded once at import time from a single `case_data.json`. Scaling to 100 cases requires case-keyed loading — a `CaseStore` that fetches by `case_id` from Postgres or a document store, lazy-loaded per request.
-
-**2. SQLite.** Works fine for one case; concurrent writes from 100 active investigations will hit lock contention. The schema already maps cleanly to Postgres — the main change is the connection layer.
-
-**3. `asyncio.new_event_loop()` per question.** The orchestrator creates and discards an event loop for each question. In a server context this needs to run inside an existing async task (FastAPI + background task queue), not spin up a new loop per call.
-
-**4. Neo4j single graph.** One graph database holds all case entities. Multi-agency at scale needs either subgraph partitioning by `case_id` or one graph instance per active case. The seeder already uses idempotent `MERGE` statements, so the seeding contract is reusable.
-
-**5. No streaming.** The pipeline returns a full `Answer` after all four stages complete. Detectives need progress feedback — the SSE contract in `schema/agent/sherlock.types.ts` already defines `sherlock_thinking`, `sherlock_tool_call`, and `sherlock_complete` events. Wiring the orchestrator to emit SSE per step is the next integration that unlocks the production UI.
-
-**6. No semantic cache.** The same question asked by two detectives on the same case runs the full pipeline twice. A Redis-backed embedding similarity cache would cut repeat costs significantly once query volume grows.
-
-## What I Would Do With Another Week
-
-1. Run Neo4j in CI and make the eval assert both Neo4j and memory modes on every PR.
-2. Add locator-specific verification for every citation type: PDF bbox, image bbox, video timestamp, and text line/char range.
-3. Add OpenTelemetry spans around each agent step for production observability.
-4. Run the adversarial eval suite against the live LLM path and gate the pipeline on refusal correctness.
-5. Score adversarial responses automatically: map LLM output against `acceptable_responses` and `forbidden_phrases` in `questions_adversarial.json`.
-
-## Where I Cut Corners
-
-- The critic validates source grounding using parsed text or evidence metadata; it does not do pixel/timecode-level verification for PDFs and media.
-- Dense retrieval ran in the final industrial path. BM25 fallback remains for dependency-light environments.
-- The adversarial test suite (58 deterministic tests + 6 adversarial question specs in `questions_adversarial.json`) covers the critic and pipeline defensively, but the LLM-path adversarial responses are not yet scored in the eval harness.
-
-## Note on System Prompt Case-Specificity
-
-The synthesizer's `_SYNTH_SYSTEM` prompt contains case-specific examples ("Kyle D. Lawrence", "Snapchat, Session"). These are intentional LLM guidance — concrete examples produce more reliable structured output than abstract placeholders. They are not routing code: all subagent routing dispatches are driven by dynamic proper-noun extraction (`nlp_utils.extract_proper_nouns`) and are verified free of hardcoded strings by `test_no_hardcoding.py`'s AST scan.
+1. Auto-score adversarial refusals against `acceptable_responses` / `forbidden_phrases`, gated on PR.
+2. Add locator-specific verification per citation type: PDF bbox, image bbox, video timestamp.
+3. Run Neo4j in CI; assert both Neo4j and in-memory modes on every PR.
