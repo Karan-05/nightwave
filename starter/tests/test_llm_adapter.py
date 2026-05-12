@@ -167,3 +167,115 @@ def test_factory_missing_openai_key_raises(monkeypatch: pytest.MonkeyPatch) -> N
     with patch.dict(sys.modules, {"openai": mock_openai_mod}):
         with pytest.raises(KeyError):
             get_llm_client()
+
+
+# ── Gemini ────────────────────────────────────────────────────────────────────
+
+
+def test_factory_returns_gemini_when_provider_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With NIGHTWAVE_LLM_PROVIDER=gemini, factory must return GeminiAdapter."""
+    monkeypatch.setenv("NIGHTWAVE_LLM_PROVIDER", "gemini")
+    monkeypatch.setenv("GOOGLE_API_KEY", "fake-gemini-key")
+    monkeypatch.delenv("NIGHTWAVE_LLM_MODEL", raising=False)
+
+    mock_genai = MagicMock()
+    with patch.dict(sys.modules, {"google": MagicMock(), "google.generativeai": mock_genai}):
+        client = get_llm_client()
+
+    from nightwave.multiagent.llm import GeminiAdapter
+
+    assert isinstance(client, GeminiAdapter), (
+        f"Expected GeminiAdapter when NIGHTWAVE_LLM_PROVIDER=gemini, got {type(client)}"
+    )
+
+
+def test_factory_default_gemini_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default Gemini model must be gemini-2.0-flash when no model env var set."""
+    monkeypatch.setenv("NIGHTWAVE_LLM_PROVIDER", "gemini")
+    monkeypatch.setenv("GOOGLE_API_KEY", "fake-gemini-key")
+    monkeypatch.delenv("NIGHTWAVE_LLM_MODEL", raising=False)
+
+    mock_genai = MagicMock()
+    with patch.dict(sys.modules, {"google": MagicMock(), "google.generativeai": mock_genai}):
+        client = get_llm_client()
+
+    assert client.model == "gemini-2.0-flash", (
+        f"Expected default Gemini model 'gemini-2.0-flash', got {client.model!r}"
+    )
+
+
+def test_factory_missing_gemini_key_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Missing GOOGLE_API_KEY when provider=gemini must raise KeyError."""
+    monkeypatch.setenv("NIGHTWAVE_LLM_PROVIDER", "gemini")
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+
+    with pytest.raises(KeyError):
+        get_llm_client()
+
+
+# ── Bedrock ───────────────────────────────────────────────────────────────────
+
+
+def test_factory_returns_bedrock_when_provider_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With NIGHTWAVE_LLM_PROVIDER=bedrock, factory must return BedrockAdapter."""
+    monkeypatch.setenv("NIGHTWAVE_LLM_PROVIDER", "bedrock")
+    monkeypatch.delenv("NIGHTWAVE_LLM_MODEL", raising=False)
+
+    mock_boto3 = MagicMock()
+    with patch.dict(sys.modules, {"boto3": mock_boto3}):
+        client = get_llm_client()
+
+    from nightwave.multiagent.llm import BedrockAdapter
+
+    assert isinstance(client, BedrockAdapter), (
+        f"Expected BedrockAdapter when NIGHTWAVE_LLM_PROVIDER=bedrock, got {type(client)}"
+    )
+
+
+def test_factory_default_bedrock_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default Bedrock model must be the Claude 3.5 Sonnet model ID."""
+    monkeypatch.setenv("NIGHTWAVE_LLM_PROVIDER", "bedrock")
+    monkeypatch.delenv("NIGHTWAVE_LLM_MODEL", raising=False)
+
+    mock_boto3 = MagicMock()
+    with patch.dict(sys.modules, {"boto3": mock_boto3}):
+        client = get_llm_client()
+
+    assert client.model == "anthropic.claude-3-5-sonnet-20241022-v2:0", (
+        f"Expected default Bedrock model, got {client.model!r}"
+    )
+
+
+# ── Ollama ────────────────────────────────────────────────────────────────────
+
+
+def test_factory_returns_ollama_when_provider_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With NIGHTWAVE_LLM_PROVIDER=ollama, factory must return OllamaAdapter."""
+    monkeypatch.setenv("NIGHTWAVE_LLM_PROVIDER", "ollama")
+    monkeypatch.delenv("NIGHTWAVE_LLM_MODEL", raising=False)
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+    mock_openai_mod = MagicMock()
+    with patch.dict(sys.modules, {"openai": mock_openai_mod}):
+        client = get_llm_client()
+
+    from nightwave.multiagent.llm import OllamaAdapter
+
+    assert isinstance(client, OllamaAdapter), (
+        f"Expected OllamaAdapter when NIGHTWAVE_LLM_PROVIDER=ollama, got {type(client)}"
+    )
+
+
+def test_factory_default_ollama_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default Ollama model must be llama3.2 when no model env var set."""
+    monkeypatch.setenv("NIGHTWAVE_LLM_PROVIDER", "ollama")
+    monkeypatch.delenv("NIGHTWAVE_LLM_MODEL", raising=False)
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+    mock_openai_mod = MagicMock()
+    with patch.dict(sys.modules, {"openai": mock_openai_mod}):
+        client = get_llm_client()
+
+    assert client.model == "llama3.2", (
+        f"Expected default Ollama model 'llama3.2', got {client.model!r}"
+    )

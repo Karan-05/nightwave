@@ -126,11 +126,11 @@ Additional validation:
 ruff check .                         # passed
 mypy nightwave                       # passed
 python -m compileall nightwave tests # passed
-pytest -q --ignore=tests/test_multiagent_contract.py   # 129 passed, no LLM required
+pytest -q --ignore=tests/test_multiagent_contract.py   # 136 passed, no LLM required
 pytest tests/test_multiagent_contract.py               # 3 passed, live Anthropic + Neo4j
 ```
 
-Test breakdown (10 files, 129 deterministic tests):
+Test breakdown (10 files, 136 deterministic tests):
 
 | File | Tests | Surface |
 |---|---:|---|
@@ -142,7 +142,7 @@ Test breakdown (10 files, 129 deterministic tests):
 | `test_orchestrator.py` | 7 | Retry logic, confidence cap, token budget guard, no-leak of critic feedback |
 | `test_orchestrator_state.py` | 7 | State isolation, token accumulation, graph cap passthrough, mutable default safety |
 | `test_no_hardcoding.py` | 3 | AST scan: no entity IDs, Cypher args, or platform keywords in dispatch lists |
-| `test_llm_adapter.py` | 12 | Protocol conformance, factory dispatch, model defaults, env-var overrides, missing-key errors |
+| `test_llm_adapter.py` | 19 | Protocol conformance, factory dispatch for all 5 providers, model defaults, env-var overrides, missing-key errors |
 
 ## Answers Produced
 
@@ -160,12 +160,26 @@ Those map to `hyp-josh-coconspirator`, `hyp-additional-victims`, `evt-feb13-meet
 
 ## Provider-Neutral LLM Adapter
 
-The synthesizer now dispatches through a thin adapter layer (`nightwave/multiagent/llm.py`) rather than calling Anthropic directly. Two env vars control it:
+The synthesizer dispatches through a thin adapter layer (`nightwave/multiagent/llm.py`) rather than calling Anthropic directly. Two env vars control it:
 
 ```bash
-NIGHTWAVE_LLM_PROVIDER=openai   # or anthropic (default)
-NIGHTWAVE_LLM_MODEL=gpt-4o      # overrides per-provider default
+NIGHTWAVE_LLM_PROVIDER=anthropic   # default
+NIGHTWAVE_LLM_PROVIDER=openai      # OpenAI Chat Completions
+NIGHTWAVE_LLM_PROVIDER=gemini      # Google Generative AI
+NIGHTWAVE_LLM_PROVIDER=bedrock     # AWS Bedrock Converse API
+NIGHTWAVE_LLM_PROVIDER=ollama      # Ollama (local, OpenAI-compatible)
+NIGHTWAVE_LLM_MODEL=gpt-4o         # overrides per-provider default
 ```
+
+Provider credentials and defaults:
+
+| Provider | Key env var | Default model |
+|---|---|---|
+| anthropic | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` |
+| openai | `OPENAI_API_KEY` | `gpt-4o` |
+| gemini | `GOOGLE_API_KEY` | `gemini-2.0-flash` |
+| bedrock | boto3 credential chain | `anthropic.claude-3-5-sonnet-20241022-v2:0` |
+| ollama | none (`OLLAMA_BASE_URL` for endpoint) | `llama3.2` |
 
 The adapter contract is intentionally small:
 
@@ -173,9 +187,11 @@ The adapter contract is intentionally small:
 def chat(system, messages, max_tokens, temperature) -> (text, input_tokens, output_tokens)
 ```
 
-Retry logic, cost tracking, and JSON extraction all live in the synthesizer, not the adapter. That means switching from Anthropic to OpenAI is a one-line env change — the rest of the pipeline is provider-blind.
+Retry logic, cost tracking, and JSON extraction all live in the synthesizer, not the adapter. Switching providers is a one-line env change — the rest of the pipeline is provider-blind.
 
-One deliberate decision: the OpenAI adapter does *not* use `response_format={"type": "json_object"}`. Both providers go through the same prompt-only JSON enforcement and `_extract_json` fallback. This keeps the synthesizer's validation path identical across providers, which means the critic and tests work unchanged regardless of which LLM is active.
+One deliberate decision: none of the adapters use native structured output modes (`response_format`, `response_schema`, etc.). All five providers go through the same prompt-only JSON enforcement and `_extract_json` fallback. This keeps the synthesizer's validation path and the critic identical across providers — the tests work unchanged regardless of which LLM is active.
+
+Ollama reuses the `openai` SDK with `base_url="http://localhost:11434/v1"` and `api_key="ollama"` — no separate HTTP client needed. Bedrock uses the Converse API, which speaks the same message schema regardless of the underlying model family (Claude, Titan, Llama, Mistral).
 
 ## Where the Architecture Breaks at 100 Cases
 
@@ -197,10 +213,9 @@ The honest bottlenecks, in order of severity:
 
 1. Run Neo4j in CI and make the eval assert both Neo4j and memory modes on every PR.
 2. Add locator-specific verification for every citation type: PDF bbox, image bbox, video timestamp, and text line/char range.
-3. Add provider-neutral structured output adapters (Anthropic and OpenAI) behind a common interface.
-4. Add OpenTelemetry spans around each agent step for production observability.
-5. Run the adversarial eval suite against the live LLM path and gate the pipeline on refusal correctness.
-6. Score adversarial responses automatically: map LLM output against `acceptable_responses` and `forbidden_phrases` in `questions_adversarial.json`.
+3. Add OpenTelemetry spans around each agent step for production observability.
+4. Run the adversarial eval suite against the live LLM path and gate the pipeline on refusal correctness.
+5. Score adversarial responses automatically: map LLM output against `acceptable_responses` and `forbidden_phrases` in `questions_adversarial.json`.
 
 ## Where I Cut Corners
 
