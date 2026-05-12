@@ -1,0 +1,30 @@
+[project]
+name = "nightwave-takehome"
+version = "0.1.0"
+description = "Karan take-home — mini agent harness over the Madison case"
+requires-python = ">=3.11"
+
+# Pick whichever LLM SDK fits your provider — pick ONE, don't pull in
+# all of these. The rest of the dependency tree is intentionally minimal.
+dependencies = [
+    "anthropic>=0.40",
+    "pypdf>=4.0",
+    "neo4j>=5.0",                    # graph DB driver (Neo4j 5 Community via Docker)
+    "sentence-transformers>=3.0",    # all-MiniLM-L6-v2 for dense retrieval
+    "numpy>=1.26",                   # vector arithmetic for RRF
+    # "openai>=1.40",                # uncomment to enable OpenAI provider
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "mypy>=1.10",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]

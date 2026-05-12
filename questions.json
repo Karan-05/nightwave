@@ -1,0 +1,64 @@
+{
+  "$comment": "Three questions, escalating in complexity. Each one tests a different capability. Your eval should score answers against the criteria here. Add adversarial variants if you want bonus credit.",
+  "questions": [
+    {
+      "id": "q1",
+      "tier": "retrieval",
+      "question": "What was Madison Fields wearing when she was last seen, and where in the case files does this information come from?",
+      "expected": {
+        "must_contain_phrases": [
+          "black Champion hooded sweatshirt",
+          "camo pants",
+          "black backpack"
+        ],
+        "must_cite_evidence_ids": [
+          "163faaac-d742-4160-aa62-070f9ecb96cb"
+        ],
+        "min_confidence": 0.85,
+        "rationale": "Single-source factual lookup against the Endangered Missing Child Alert PDF. Confidence should be high; if the agent reports <0.85 here it's miscalibrated downward."
+      }
+    },
+    {
+      "id": "q2",
+      "tier": "multi_hop_reasoning",
+      "question": "Did the same person groom Madison on Snapchat and on the Session app, or are these two separate offenders? Cite the specific evidence that supports your answer and explain how confident you are.",
+      "expected": {
+        "must_contain_phrases": [
+          "separate",
+          "Snapchat",
+          "Session"
+        ],
+        "must_cite_evidence_ids": [
+          "f572cb6a-e484-483c-9af8-d731c405071c",
+          "b8281149-7efc-4726-ac7b-31172e5dc458"
+        ],
+        "must_reference_entities": [
+          "ent-kyle-lawrence",
+          "ent-josh"
+        ],
+        "confidence_range": [0.45, 0.7],
+        "rationale": "Evidence supports two separate actors (Lawrence on Snapchat, Josh on Session) but Josh's identity is unverified — so the answer is 'separate, with reservations' at moderate confidence (~0.5). High confidence here (>0.85) is a calibration failure. Below 0.4 means the agent didn't find the evidence."
+      }
+    },
+    {
+      "id": "q3",
+      "tier": "uncertainty_and_planning",
+      "question": "Madison's phone went dead the evening of February 13. As of the case state on March 1, list the top three next investigative actions ranked by impact. For each, give the rationale, the expected output if it succeeds, and which case artifacts (entities, events, hypotheses, leads) support its prioritization.",
+      "expected": {
+        "must_reference_leads_or_topics": [
+          "Session forensic extraction",
+          "Snapchat subpoena",
+          "InTown Suites surveillance"
+        ],
+        "must_cite_evidence_or_hypotheses": [
+          "hyp-josh-coconspirator",
+          "hyp-additional-victims"
+        ],
+        "min_actions": 3,
+        "max_actions": 5,
+        "confidence_range": [0.5, 0.8],
+        "rationale": "This question rewards prioritization, evidence chaining (action -> hypothesis -> evidence), and operational specificity. The case already has six leads ranked by priority; the agent should land on the three critical ones with reasons that chain back to evidence. If the agent invents leads not in the case state without saying so, dock for hallucination."
+      }
+    }
+  ]
+}

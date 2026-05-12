@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+*.env
+
+# Secrets
+*.key
+Keys.*
+
+# Runtime artifacts (keep eval reports; exclude live trace)
+starter/agent_trace.jsonl
+
+# macOS
+.DS_Store
