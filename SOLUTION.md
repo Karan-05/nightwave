@@ -2,7 +2,7 @@
 
 ## Time and Tools
 
-Approximately 8–10 hours across two sessions. I used Claude Code (Anthropic's agentic CLI) substantively throughout — for code generation, test scaffolding, iteration on the graph seeder, and debugging the synthesizer JSON parsing edge cases. The architecture decisions, eval design, and citation discipline model were mine; Claude Code was my pair programmer on implementation.
+Approximately 8–10 hours across two sessions — past the 6h soft cap. I went over to harden the citation pipeline and add the provider adapter; what's still on my list is in "What I Would Do Next." I used Claude Code (Anthropic's agentic CLI) substantively throughout — for code generation, test scaffolding, iteration on the graph seeder, and debugging the synthesizer JSON parsing edge cases. The architecture decisions, eval design, and citation discipline model were mine; Claude Code was my pair programmer on implementation.
 
 ## Product Shape
 
@@ -12,7 +12,7 @@ A citation-governed investigative reasoning pipeline. The product constraint: a 
 
 The README warns against multi-agent theater, and I want to defend the choice directly.
 
-A single ReAct loop with three tools can answer all three questions and score 1.0 on the deterministic eval. The eval doesn't distinguish architectures on these questions because all generated citations happened to be valid on both runs.
+A single ReAct loop with three tools can likely answer all three questions — the questions are answerable from BM25 alone, and citation validity isn't enforced by the retrieval harness. I did not run a single-agent eval against the live API on this pass, so I can't report a score delta. The case for multi-agent rests on the qualitative argument below, not a score gap.
 
 The reason multi-agent is correct here is **citation circuit closure**. A ReAct loop that calls `search_evidence` and `submit_answer` produces answers, but no agent validates that the `evidence_id` values actually exist in the case data before they reach the detective. The critic closes that circuit. In production — where LLM outputs vary across runs and cases — the critic is the difference between a system that provably cites real evidence and one that hopes the LLM got it right. This matters in an investigative context: a hallucinated citation ID in a disclosure memo is a Brady problem, not a UX bug.
 
