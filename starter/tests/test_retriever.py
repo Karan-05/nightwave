@@ -23,16 +23,27 @@ from nightwave.multiagent.subagents.retriever import (
 )
 from nightwave.multiagent.vector_store import hybrid_search
 
-Q1 = "What was Madison Fields wearing when she was last seen, and where in the case files does this information come from?"
-Q2 = "Did the same person groom Madison on Snapchat and on the Session app, or are these two separate offenders? Cite the specific evidence that supports your answer and explain how confident you are."
-Q3 = "Madison's phone went dead the evening of February 13. As of the case state on March 1, list the top three next investigative actions ranked by impact."
+Q1 = (
+    "What was Madison Fields wearing when she was last seen, and where in the case "
+    "files does this information come from?"
+)
+Q2 = (
+    "Did the same person groom Madison on Snapchat and on the Session app, or are "
+    "these two separate offenders? Cite the specific evidence that supports your "
+    "answer and explain how confident you are."
+)
+Q3 = (
+    "Madison's phone went dead the evening of February 13. As of the case state on "
+    "March 1, list the top three next investigative actions ranked by impact."
+)
 
 OHIO_ALERT_ID = "163faaac-d742-4160-aa62-070f9ecb96cb"
-DOJ_PRESS_ID  = "f572cb6a-e484-483c-9af8-d731c405071c"
-JOSH_NEWS_ID  = "b8281149-7efc-4726-ac7b-31172e5dc458"
+DOJ_PRESS_ID = "f572cb6a-e484-483c-9af8-d731c405071c"
+JOSH_NEWS_ID = "b8281149-7efc-4726-ac7b-31172e5dc458"
 
 
 # ── Source diversity cap ──────────────────────────────────────────────────────
+
 
 def test_retriever_source_diversity_no_source_exceeds_cap() -> None:
     """After run_retriever, no single evidence_id should hold >2 of the first 6 slots."""
@@ -40,6 +51,7 @@ def test_retriever_source_diversity_no_source_exceeds_cap() -> None:
     result = run_retriever(state, k=10)
     chunks = result.retrieved_chunks[:6]
     from collections import Counter
+
     counts = Counter(c.evidence_id for c in chunks)
     for ev_id, count in counts.items():
         assert count <= 2, f"{ev_id[:8]} appears {count} times in first 6 slots (cap=2)"
@@ -52,21 +64,22 @@ def test_retriever_source_diversity_q1() -> None:
     result = run_retriever(state, k=10)
     chunks = result.retrieved_chunks[:4]
     from collections import Counter
+
     counts = Counter(c.evidence_id for c in chunks)
-    for ev_id, count in counts.items():
-        assert count <= 2, f"Source diversity violated in first 4 slots for Q1"
+    for _ev_id, count in counts.items():
+        assert count <= 2, "Source diversity violated in first 4 slots for Q1"
 
 
 # ── Must-cite coverage ────────────────────────────────────────────────────────
+
 
 def test_retriever_q1_surfaces_ohio_alert() -> None:
     """Ohio AG alert (163faaac) must appear in top 5 retrieved chunks for Q1."""
     state = AgentState(question=Q1)
     result = run_retriever(state, k=10)
     top5_ids = {c.evidence_id for c in result.retrieved_chunks[:5]}
-    assert OHIO_ALERT_ID in top5_ids, (
-        f"Ohio AG alert not in top 5. Got: {[c.evidence_id[:8] for c in result.retrieved_chunks[:5]]}"
-    )
+    top5_short_ids = [c.evidence_id[:8] for c in result.retrieved_chunks[:5]]
+    assert OHIO_ALERT_ID in top5_ids, f"Ohio AG alert not in top 5. Got: {top5_short_ids}"
 
 
 def test_retriever_q2_surfaces_both_must_cite_ids() -> None:
@@ -75,7 +88,9 @@ def test_retriever_q2_surfaces_both_must_cite_ids() -> None:
     result = run_retriever(state, k=10)
     retrieved_ids = {c.evidence_id for c in result.retrieved_chunks}
     assert DOJ_PRESS_ID in retrieved_ids, "DOJ press release (f572cb6a) not retrieved for Q2"
-    assert JOSH_NEWS_ID in retrieved_ids, "Josh/Session news article (b8281149) not retrieved for Q2"
+    assert JOSH_NEWS_ID in retrieved_ids, (
+        "Josh/Session news article (b8281149) not retrieved for Q2"
+    )
 
 
 def test_retriever_q2_doj_press_in_top8() -> None:
@@ -89,6 +104,7 @@ def test_retriever_q2_doj_press_in_top8() -> None:
 
 
 # ── Question classification ───────────────────────────────────────────────────
+
 
 def test_classify_q1_is_retrieval() -> None:
     assert _classify(Q1) == "retrieval"
@@ -107,6 +123,7 @@ def test_classify_generic_fallback() -> None:
 
 
 # ── Proper noun extraction ────────────────────────────────────────────────────
+
 
 def test_extract_proper_nouns_from_q2() -> None:
     nouns = _extract_proper_nouns(Q2)
@@ -129,6 +146,7 @@ def test_extract_proper_nouns_deduplicates() -> None:
 
 # ── Platform extraction ───────────────────────────────────────────────────────
 
+
 def test_extract_apps_platforms_session_app() -> None:
     platforms = _extract_apps_platforms("messaging via the Session app")
     assert "Session" in platforms
@@ -145,6 +163,7 @@ def test_extract_apps_platforms_no_false_positives() -> None:
 
 
 # ── Secondary query generation ────────────────────────────────────────────────
+
 
 def test_secondary_queries_multi_hop_uses_question_text() -> None:
     qs = _generate_secondary_queries(Q2, "multi_hop")
@@ -183,6 +202,7 @@ def test_secondary_queries_no_hardcoded_case_strings() -> None:
 
 # ── Hybrid search unit tests ──────────────────────────────────────────────────
 
+
 def test_hybrid_search_returns_dicts_with_required_keys() -> None:
     hits = hybrid_search("missing child clothing description", k=5)
     assert len(hits) >= 1
@@ -204,6 +224,7 @@ def test_hybrid_search_k_upper_bound() -> None:
 
 
 # ── New edge case tests ───────────────────────────────────────────────────────
+
 
 # 1. Classification short-circuit: question has BOTH "wearing" AND "same person"
 def test_classify_retrieval_short_circuits_before_multi_hop() -> None:
@@ -276,9 +297,7 @@ def test_run_retriever_k1_chunk_count_and_fields() -> None:
             f"Chunk has invalid evidence_id: {c.evidence_id!r}"
         )
         # excerpt is a string (may be empty if source had no text, but must exist)
-        assert isinstance(c.excerpt, str), (
-            f"Chunk excerpt must be a string, got {type(c.excerpt)}"
-        )
+        assert isinstance(c.excerpt, str), f"Chunk excerpt must be a string, got {type(c.excerpt)}"
 
 
 # 8. Trace entry shape after run_retriever
@@ -286,14 +305,32 @@ def test_run_retriever_trace_entry_shape() -> None:
     """run_retriever appends exactly one entry with the documented keys."""
     state = AgentState(question=Q1)
     run_retriever(state, k=5)
-    assert len(state.trace) == 1, (
-        f"Expected exactly 1 trace entry, got {len(state.trace)}"
-    )
+    assert len(state.trace) == 1, f"Expected exactly 1 trace entry, got {len(state.trace)}"
     entry = state.trace[0]
-    expected_keys = {"step", "question_class", "hits", "secondary_queries", "top_ids"}
+    expected_keys = {
+        "step",
+        "case_id",
+        "question_class",
+        "hits",
+        "secondary_queries",
+        "top_ids",
+    }
     assert set(entry.keys()) == expected_keys, (
         f"Trace entry has unexpected keys: {set(entry.keys())} vs {expected_keys}"
     )
+
+
+def test_run_retriever_respects_case_id_isolation() -> None:
+    state = AgentState(
+        question="What was Madison wearing when last seen?",
+        case_id="wrong-case",
+    )
+
+    result = run_retriever(state)
+
+    assert result.retrieved_chunks == []
+    entry = result.trace[-1]
+    assert entry["case_id"] == "wrong-case"
     assert entry["step"] == "retriever"
     assert isinstance(entry["hits"], int)
     assert isinstance(entry["secondary_queries"], list)

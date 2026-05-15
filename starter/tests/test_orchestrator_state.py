@@ -6,13 +6,12 @@ unittest.mock.patch.
 
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
-import pytest
-
-from nightwave.multiagent.state import AgentState, DraftCitation, RetrievedChunk
+from nightwave.multiagent.observability import RunObserver
 from nightwave.multiagent.orchestrator import run_pipeline
-
+from nightwave.multiagent.state import AgentState, DraftCitation, RetrievedChunk
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -31,8 +30,15 @@ def _make_retriever_chunks() -> list[RetrievedChunk]:
 
 
 def _make_graph_items(count: int = 3) -> list[dict]:
-    return [{"artifact_type": "hypothesis", "id": f"hyp-{i}", "statement": f"stmt {i}", "confidence": 0.5}
-            for i in range(count)]
+    return [
+        {
+            "artifact_type": "hypothesis",
+            "id": f"hyp-{i}",
+            "statement": f"stmt {i}",
+            "confidence": 0.5,
+        }
+        for i in range(count)
+    ]
 
 
 def _critic_pass(state: AgentState) -> AgentState:
@@ -125,8 +131,12 @@ def test_token_budget_accumulates_across_synthesizer_retries() -> None:
     with (
         patch("nightwave.multiagent.orchestrator.run_retriever", side_effect=lambda s: s),
         patch("nightwave.multiagent.orchestrator.run_graph_agent", side_effect=lambda s: s),
-        patch("nightwave.multiagent.orchestrator.run_synthesizer", side_effect=mock_synth_accumulates),
-        patch("nightwave.multiagent.orchestrator.run_critic", side_effect=mock_critic_fail_then_pass),
+        patch(
+            "nightwave.multiagent.orchestrator.run_synthesizer", side_effect=mock_synth_accumulates
+        ),
+        patch(
+            "nightwave.multiagent.orchestrator.run_critic", side_effect=mock_critic_fail_then_pass
+        ),
     ):
         answer = run_pipeline("What happened?", "test-tokens")
 
@@ -244,7 +254,10 @@ def test_answer_citations_match_draft_citations_exactly_after_critic_pass() -> N
     with (
         patch("nightwave.multiagent.orchestrator.run_retriever", side_effect=lambda s: s),
         patch("nightwave.multiagent.orchestrator.run_graph_agent", side_effect=lambda s: s),
-        patch("nightwave.multiagent.orchestrator.run_synthesizer", side_effect=mock_synth_with_citations),
+        patch(
+            "nightwave.multiagent.orchestrator.run_synthesizer",
+            side_effect=mock_synth_with_citations,
+        ),
         patch("nightwave.multiagent.orchestrator.run_critic", side_effect=_critic_pass),
     ):
         answer = run_pipeline("What happened?", "test-citations")
@@ -252,9 +265,10 @@ def test_answer_citations_match_draft_citations_exactly_after_critic_pass() -> N
     assert len(answer.citations) == len(expected_citations), (
         f"Expected {len(expected_citations)} citations, got {len(answer.citations)}"
     )
-    for i, (actual, expected) in enumerate(zip(answer.citations, expected_citations)):
+    for i, (actual, expected) in enumerate(zip(answer.citations, expected_citations, strict=True)):
         assert actual.evidence_id == expected.evidence_id, (
-            f"Citation[{i}] evidence_id mismatch: {actual.evidence_id!r} != {expected.evidence_id!r}"
+            f"Citation[{i}] evidence_id mismatch: "
+            f"{actual.evidence_id!r} != {expected.evidence_id!r}"
         )
         assert actual.excerpt == expected.excerpt, (
             f"Citation[{i}] excerpt mismatch: {actual.excerpt!r} != {expected.excerpt!r}"
@@ -302,9 +316,15 @@ def test_trace_contains_at_least_4_distinct_step_kinds_after_retry() -> None:
         return state
 
     with (
-        patch("nightwave.multiagent.orchestrator.run_retriever", side_effect=mock_retriever_with_trace),
-        patch("nightwave.multiagent.orchestrator.run_graph_agent", side_effect=mock_graph_with_trace),
-        patch("nightwave.multiagent.orchestrator.run_synthesizer", side_effect=mock_synth_with_trace),
+        patch(
+            "nightwave.multiagent.orchestrator.run_retriever", side_effect=mock_retriever_with_trace
+        ),
+        patch(
+            "nightwave.multiagent.orchestrator.run_graph_agent", side_effect=mock_graph_with_trace
+        ),
+        patch(
+            "nightwave.multiagent.orchestrator.run_synthesizer", side_effect=mock_synth_with_trace
+        ),
         patch("nightwave.multiagent.orchestrator.run_critic", side_effect=mock_critic_with_trace),
     ):
         answer = run_pipeline("What happened?", "test-trace-multi")
@@ -343,9 +363,7 @@ def test_agent_state_initialization_defaults() -> None:
     assert state.critic_passed is False, (
         f"critic_passed default should be False, got {state.critic_passed!r}"
     )
-    assert state.token_usage == {}, (
-        f"token_usage default should be {{}}, got {state.token_usage!r}"
-    )
+    assert state.token_usage == {}, f"token_usage default should be {{}}, got {state.token_usage!r}"
 
     # Verify list defaults are independent instances (no shared-mutable default)
     state2 = AgentState(question="another question")
@@ -357,3 +375,52 @@ def test_agent_state_initialization_defaults() -> None:
     assert state2.retrieved_chunks == [], "list defaults must not be shared between instances"
     state.graph_context.append({"x": 1})
     assert state2.graph_context == [], "graph_context defaults must not be shared between instances"
+
+
+def test_run_observer_writes_case_scoped_jsonl(tmp_path) -> None:
+    trace_path = tmp_path / "trace.jsonl"
+    metrics_path = tmp_path / "metrics.json"
+    observer = RunObserver(
+        question_id="q-test",
+        case_id="case-123",
+        trace_path=trace_path,
+        metrics_path=metrics_path,
+        run_id="run-123",
+    )
+
+    with observer.time_stage("retrieval"):
+        pass
+    observer.write_run_record({"step": "orchestrator", "critic_passed": True})
+
+    payload = json.loads(trace_path.read_text().strip())
+    assert payload["run_id"] == "run-123"
+    assert payload["case_id"] == "case-123"
+    assert payload["question_id"] == "q-test"
+    assert payload["stage_timings_s"]["retrieval"] >= 0
+    assert payload["critic_passed"] is True
+
+    metrics = json.loads(metrics_path.read_text())
+    assert metrics["runs_total"] == 1
+    assert metrics["critic_failures_total"] == 0
+    assert metrics["stage_timings_s"]["retrieval"]["count"] == 1
+
+
+def test_run_observer_accumulates_failure_metrics(tmp_path) -> None:
+    trace_path = tmp_path / "trace.jsonl"
+    metrics_path = tmp_path / "metrics.json"
+    observer = RunObserver(
+        question_id="q-test",
+        case_id="case-123",
+        trace_path=trace_path,
+        metrics_path=metrics_path,
+        run_id="run-123",
+    )
+
+    observer.stage_timings["critic"] = 0.25
+    observer.write_run_record({"step": "orchestrator", "critic_passed": False})
+    observer.write_run_record({"step": "orchestrator", "critic_passed": True})
+
+    metrics = json.loads(metrics_path.read_text())
+    assert metrics["runs_total"] == 2
+    assert metrics["critic_failures_total"] == 1
+    assert metrics["stage_timings_s"]["critic"]["count"] == 2

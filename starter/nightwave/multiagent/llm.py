@@ -122,8 +122,10 @@ class GeminiAdapter:
         )
         # Convert OpenAI-style role names to Gemini's ("assistant" → "model")
         contents = [
-            {"role": "model" if msg["role"] == "assistant" else msg["role"],
-             "parts": [msg["content"]]}
+            {
+                "role": "model" if msg["role"] == "assistant" else msg["role"],
+                "parts": [msg["content"]],
+            }
             for msg in messages
         ]
         resp = model_client.generate_content(contents)
@@ -155,8 +157,7 @@ class BedrockAdapter:
         temperature: float = 0.0,
     ) -> tuple[str, int, int]:
         bedrock_messages = [
-            {"role": msg["role"], "content": [{"text": msg["content"]}]}
-            for msg in messages
+            {"role": msg["role"], "content": [{"text": msg["content"]}]} for msg in messages
         ]
         resp = self._client.converse(
             modelId=self.model,

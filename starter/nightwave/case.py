@@ -42,6 +42,11 @@ def load_case_json(path: str | Path = DEFAULT_JSON) -> dict[str, Any]:
     return json.loads(Path(path).read_text())
 
 
+def current_case_id(path: str | Path = DEFAULT_JSON) -> str:
+    """Return the active case ID used to isolate retrieval and graph records."""
+    return str(load_case_json(path).get("case_id", ""))
+
+
 def connect_db(path: str | Path = DEFAULT_DB) -> sqlite3.Connection:
     """Open the SQLite case file. Tables: entities, relationships, events,
     locations, leads, hypotheses, citations, pipeline_jobs, audit_log,
@@ -67,6 +72,7 @@ def evidence_list() -> list[Path]:
 
 
 # ---- Tiny helpers (use them or write your own) ----
+
 
 def find_entity(case: dict, name_or_id: str) -> dict | None:
     """Return the entity matching by id or by case-insensitive name. None if absent."""

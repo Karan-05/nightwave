@@ -21,16 +21,16 @@ from nightwave.multiagent.subagents.graph_agent import (
     _memory_graph_context,
     run_graph_agent,
 )
-from nightwave.tools import _INDEX
-
 
 # ── Helper ────────────────────────────────────────────────────────────────────
+
 
 def _make_state(question: str) -> AgentState:
     return AgentState(question=question)
 
 
 # ── 1. Classification: Q2 without platform names ──────────────────────────────
+
 
 def test_classify_q2_same_person_no_platform_names() -> None:
     """'same person' alone should trigger multi_hop classification."""
@@ -45,6 +45,7 @@ def test_classify_q2_keyword_two_triggers_multi_hop() -> None:
 
 
 # ── 2. Classification: retrieval takes priority over multi_hop ────────────────
+
 
 def test_classify_retrieval_beats_multi_hop_on_overlap() -> None:
     """A question with both 'wearing' (retrieval) and 'two' (multi_hop) should
@@ -66,6 +67,7 @@ def test_classify_last_seen_is_retrieval() -> None:
 
 
 # ── 3. Classification: 'what timeline' with no action keywords → "general" ───
+
 
 def test_classify_timeline_only_is_general() -> None:
     """'what timeline' with no retrieval/multi_hop/planning keywords → 'general'.
@@ -95,6 +97,7 @@ def test_classify_general_generic_question() -> None:
 
 # ── 4. Memory context: entity question → relationships + entities ─────────────
 
+
 def test_memory_graph_context_entity_question_includes_relationships() -> None:
     """'Who is connected to Madison?' triggers the 'connected'/'who' routing."""
     results = _memory_graph_context("Who is connected to Madison?")
@@ -115,6 +118,7 @@ def test_memory_graph_context_entity_question_includes_entities() -> None:
 
 # ── 5. Memory context: event question → events ────────────────────────────────
 
+
 def test_memory_graph_context_event_question_includes_events() -> None:
     """'When did the incident happen?' triggers the event/timeline routing."""
     results = _memory_graph_context("When did the incident happen?")
@@ -132,6 +136,7 @@ def test_memory_graph_context_timeline_keyword_includes_events() -> None:
 
 
 # ── 6. Memory context: fallback → leads + hypotheses ─────────────────────────
+
 
 def test_memory_graph_context_fallback_default_returns_leads_and_hypotheses() -> None:
     """A garbled question with no routing keywords hits the default branch."""
@@ -160,6 +165,7 @@ def test_memory_graph_context_fallback_has_hypotheses() -> None:
 
 # ── 7. Memory context: result cap ≤ 30 ───────────────────────────────────────
 
+
 def test_memory_graph_context_cap_is_applied() -> None:
     """Result must be ≤ 30 items regardless of how many the index contains.
 
@@ -180,6 +186,7 @@ def test_memory_graph_context_fallback_cap_is_applied() -> None:
 
 # ── 8. run_graph_agent: state shape ──────────────────────────────────────────
 
+
 def test_run_graph_agent_returns_list() -> None:
     """graph_context must be a list after run_graph_agent."""
     state = _make_state("Who is connected to Madison?")
@@ -199,8 +206,7 @@ def test_run_graph_agent_trace_has_graph_agent_entry() -> None:
     state = _make_state("Who is connected to Madison?")
     result = run_graph_agent(state)
     assert any(
-        e.get("step") == "graph_agent" or e.get("kind") == "graph_agent"
-        for e in result.trace
+        e.get("step") == "graph_agent" or e.get("kind") == "graph_agent" for e in result.trace
     ), f"No graph_agent entry in trace: {result.trace}"
 
 
@@ -209,8 +215,7 @@ def test_run_graph_agent_trace_entry_has_question_class() -> None:
     state = _make_state("Who is connected to Madison?")
     result = run_graph_agent(state)
     graph_entries = [
-        e for e in result.trace
-        if e.get("step") == "graph_agent" or e.get("kind") == "graph_agent"
+        e for e in result.trace if e.get("step") == "graph_agent" or e.get("kind") == "graph_agent"
     ]
     assert graph_entries, "No graph_agent trace entry found"
     assert "question_class" in graph_entries[-1], (
@@ -220,13 +225,13 @@ def test_run_graph_agent_trace_entry_has_question_class() -> None:
 
 # ── 9. run_graph_agent: planning question → at least one hypothesis ───────────
 
+
 def test_run_graph_agent_planning_includes_hypothesis() -> None:
     """A planning question should produce at least one hypothesis in graph_context."""
     state = _make_state("What are the next steps in the investigation?")
     result = run_graph_agent(state)
     hypothesis_items = [
-        item for item in result.graph_context
-        if item.get("artifact_type") == "hypothesis"
+        item for item in result.graph_context if item.get("artifact_type") == "hypothesis"
     ]
     assert len(hypothesis_items) >= 1, (
         "Planning question should include at least one hypothesis in graph_context"
@@ -237,16 +242,14 @@ def test_run_graph_agent_planning_includes_lead() -> None:
     """A planning question should also include at least one lead."""
     state = _make_state("What are the next steps in the investigation?")
     result = run_graph_agent(state)
-    lead_items = [
-        item for item in result.graph_context
-        if item.get("artifact_type") == "lead"
-    ]
+    lead_items = [item for item in result.graph_context if item.get("artifact_type") == "lead"]
     assert len(lead_items) >= 1, (
         "Planning question should include at least one lead in graph_context"
     )
 
 
 # ── 10. run_graph_agent: empty question does not crash ────────────────────────
+
 
 def test_run_graph_agent_empty_question_does_not_crash() -> None:
     """run_graph_agent with an empty question must not raise any exception."""
@@ -262,12 +265,22 @@ def test_run_graph_agent_empty_question_has_trace() -> None:
     state = _make_state("")
     result = run_graph_agent(state)
     assert any(
-        e.get("step") == "graph_agent" or e.get("kind") == "graph_agent"
-        for e in result.trace
+        e.get("step") == "graph_agent" or e.get("kind") == "graph_agent" for e in result.trace
     ), f"Expected graph_agent trace entry even for empty question, got: {result.trace}"
 
 
+def test_run_graph_agent_respects_case_id_isolation() -> None:
+    state = AgentState(question="Who is connected to Madison?", case_id="wrong-case")
+
+    result = run_graph_agent(state)
+
+    assert result.graph_context == []
+    assert result.trace[-1]["mode"] == "case_mismatch"
+    assert result.trace[-1]["case_id"] == "wrong-case"
+
+
 # ── Bonus regression: multi_hop classifier correctly uses tuple, not set ──────
+
 
 def test_classify_multi_hop_all_keywords() -> None:
     """Verify every multi_hop keyword individually triggers the classification."""
@@ -281,9 +294,7 @@ def test_classify_multi_hop_all_keywords() -> None:
     ]
     for kw in multi_hop_keywords:
         result = _classify_question(f"question about {kw} something")
-        assert result == "multi_hop", (
-            f"Expected 'multi_hop' for keyword '{kw}', got '{result}'"
-        )
+        assert result == "multi_hop", f"Expected 'multi_hop' for keyword '{kw}', got '{result}'"
 
 
 def test_classify_planning_keywords() -> None:
@@ -292,6 +303,4 @@ def test_classify_planning_keywords() -> None:
     for kw in planning_keywords:
         # These must not overlap with retrieval or multi_hop keywords
         result = _classify_question(f"should we {kw} this case")
-        assert result == "planning", (
-            f"Expected 'planning' for keyword '{kw}', got '{result}'"
-        )
+        assert result == "planning", f"Expected 'planning' for keyword '{kw}', got '{result}'"

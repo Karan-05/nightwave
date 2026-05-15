@@ -16,7 +16,8 @@ def _question(question_id: str) -> dict:
     return next(q for q in QUESTIONS if q["id"] == question_id)
 
 
-def test_multiagent_answers_all_questions_with_valid_citations() -> None:
+def test_multiagent_answers_all_questions_with_valid_citations(monkeypatch) -> None:
+    monkeypatch.setenv("SYNTH_MODE", "deterministic")
     for question in QUESTIONS:
         answer = answer_multi(question["question"], question["id"])
 
@@ -30,7 +31,8 @@ def test_multiagent_answers_all_questions_with_valid_citations() -> None:
         assert result["scores"]["overall"] >= 0.95
 
 
-def test_q2_is_calibrated_and_references_both_platform_actors() -> None:
+def test_q2_is_calibrated_and_references_both_platform_actors(monkeypatch) -> None:
+    monkeypatch.setenv("SYNTH_MODE", "deterministic")
     question = _question("q2")
     answer = answer_multi(question["question"], question["id"])
 
@@ -45,7 +47,8 @@ def test_q2_is_calibrated_and_references_both_platform_actors() -> None:
     }
 
 
-def test_q3_prioritizes_existing_critical_leads() -> None:
+def test_q3_prioritizes_existing_critical_leads(monkeypatch) -> None:
+    monkeypatch.setenv("SYNTH_MODE", "deterministic")
     question = _question("q3")
     answer = answer_multi(question["question"], question["id"])
 

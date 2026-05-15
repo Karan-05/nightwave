@@ -225,8 +225,7 @@ TOOL_SCHEMAS: list[dict] = [
                 "artifact_id": {
                     "type": "string",
                     "description": (
-                        "Artifact ID, e.g. 'ent-kyle-lawrence', "
-                        "'hyp-josh-coconspirator'"
+                        "Artifact ID, e.g. 'ent-kyle-lawrence', 'hyp-josh-coconspirator'"
                     ),
                 },
             },
@@ -245,8 +244,7 @@ TOOL_SCHEMAS: list[dict] = [
                 "response": {
                     "type": "string",
                     "description": (
-                        "Full answer text. Cite evidence inline as "
-                        "[evidence_id: excerpt]."
+                        "Full answer text. Cite evidence inline as [evidence_id: excerpt]."
                     ),
                 },
                 "confidence": {
@@ -259,8 +257,7 @@ TOOL_SCHEMAS: list[dict] = [
                 "reasoning": {
                     "type": "string",
                     "description": (
-                        "Brief trace of what you found and how you reached your "
-                        "conclusion."
+                        "Brief trace of what you found and how you reached your conclusion."
                     ),
                 },
                 "citations": {

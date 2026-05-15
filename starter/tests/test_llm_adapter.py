@@ -7,7 +7,6 @@ dispatch logic.
 
 from __future__ import annotations
 
-import os
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -15,8 +14,8 @@ import pytest
 
 from nightwave.multiagent.llm import LLMClient, get_llm_client
 
-
 # ── Fake adapter ──────────────────────────────────────────────────────────────
+
 
 class FakeAdapter:
     """Minimal LLMClient implementation for testing."""
@@ -34,6 +33,7 @@ class FakeAdapter:
 
 
 # ── Protocol conformance ──────────────────────────────────────────────────────
+
 
 def test_fake_adapter_satisfies_protocol() -> None:
     """FakeAdapter must satisfy the LLMClient Protocol at runtime."""
@@ -72,6 +72,7 @@ def test_chat_token_counts_non_negative() -> None:
 
 # ── Factory dispatch ──────────────────────────────────────────────────────────
 
+
 def test_factory_returns_anthropic_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     """Without NIGHTWAVE_LLM_PROVIDER set, factory must return AnthropicAdapter."""
     monkeypatch.delenv("NIGHTWAVE_LLM_PROVIDER", raising=False)
@@ -83,6 +84,7 @@ def test_factory_returns_anthropic_by_default(monkeypatch: pytest.MonkeyPatch) -
         client = get_llm_client()
 
     from nightwave.multiagent.llm import AnthropicAdapter
+
     assert isinstance(client, AnthropicAdapter), (
         f"Expected AnthropicAdapter by default, got {type(client)}"
     )
@@ -99,6 +101,7 @@ def test_factory_returns_openai_when_provider_set(monkeypatch: pytest.MonkeyPatc
         client = get_llm_client()
 
     from nightwave.multiagent.llm import OpenAIAdapter
+
     assert isinstance(client, OpenAIAdapter), (
         f"Expected OpenAIAdapter when NIGHTWAVE_LLM_PROVIDER=openai, got {type(client)}"
     )

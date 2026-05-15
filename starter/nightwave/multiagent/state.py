@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from nightwave.case import current_case_id
+
 
 @dataclass
 class RetrievedChunk:
@@ -14,6 +16,7 @@ class RetrievedChunk:
     excerpt: str
     score: float
     source: str  # "bm25" | "vector" | "graph" | "rrf"
+    case_id: str = field(default_factory=current_case_id)
 
 
 @dataclass
@@ -30,6 +33,7 @@ class DraftCitation:
 class AgentState:
     question: str
     question_id: str = ""
+    case_id: str = field(default_factory=current_case_id)
 
     # Retrieval outputs (populated by retriever + graph_agent in parallel)
     retrieved_chunks: list[RetrievedChunk] = field(default_factory=list)

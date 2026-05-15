@@ -27,7 +27,9 @@ def _make_state(**kwargs) -> AgentState:
     return state
 
 
-def _citation(evidence_id: str, excerpt: str = "test excerpt", confidence: float = 0.8) -> DraftCitation:
+def _citation(
+    evidence_id: str, excerpt: str = "test excerpt", confidence: float = 0.8
+) -> DraftCitation:
     ev = _INDEX.evidence_by_id.get(evidence_id, {})
     return DraftCitation(
         evidence_id=evidence_id,
@@ -39,6 +41,7 @@ def _citation(evidence_id: str, excerpt: str = "test excerpt", confidence: float
 
 
 # ── Hard-fail: hallucinated ID ────────────────────────────────────────────────
+
 
 def test_critic_hard_fail_hallucinated_id() -> None:
     fake_id = "00000000-0000-0000-0000-000000000000"
@@ -84,6 +87,7 @@ def test_critic_hard_fail_confidence_capped_on_hallucinated_id() -> None:
 
 # ── Pass: valid ID with known evidence ────────────────────────────────────────
 
+
 def test_critic_passes_valid_evidence_id_no_source_file() -> None:
     """Citations with no source_path are accepted if evidence_id is valid."""
     ev_id = _valid_ev_id()
@@ -114,15 +118,18 @@ def test_critic_no_citations_passes_hard_check() -> None:
 
 # ── Soft-fail: ungrounded excerpt ────────────────────────────────────────────
 
+
 def test_critic_soft_fail_completely_fabricated_excerpt() -> None:
     ev_id = _valid_ev_id()
     state = _make_state(
         draft_response="test",
         draft_confidence=0.9,
-        draft_citations=[_citation(
-            ev_id,
-            excerpt="totally fabricated content that is not in any source file",
-        )],
+        draft_citations=[
+            _citation(
+                ev_id,
+                excerpt="totally fabricated content that is not in any source file",
+            )
+        ],
     )
     result = run_critic(state)
     # Soft fail means critic_passed may be False OR feedback contains grounding warning
@@ -131,6 +138,7 @@ def test_critic_soft_fail_completely_fabricated_excerpt() -> None:
 
 
 # ── Confidence calibration ────────────────────────────────────────────────────
+
 
 def test_critic_does_not_pass_over_calibrated_single_source() -> None:
     """Confidence >0.97 with a single source should trigger a soft warning."""
@@ -150,6 +158,7 @@ def test_critic_does_not_pass_over_calibrated_single_source() -> None:
 
 
 # ── New edge cases ────────────────────────────────────────────────────────────
+
 
 # 9. Citation with empty excerpt — expect soft fail (ungrounded)
 def test_critic_empty_excerpt_soft_fails() -> None:
@@ -181,7 +190,7 @@ def test_critic_valid_id_empty_source_path() -> None:
         draft_citations=[
             DraftCitation(
                 evidence_id=ev_id,
-                source_path="",   # deliberately empty
+                source_path="",  # deliberately empty
                 locator={},
                 excerpt="totally fabricated text that will not be found",
                 confidence=0.8,
@@ -198,7 +207,6 @@ def test_critic_valid_id_empty_source_path() -> None:
 # 11. Prior critic_feedback is replaced (not accumulated) on each run
 def test_critic_replaces_prior_feedback() -> None:
     """run_critic overwrites state.critic_feedback unconditionally on each call."""
-    ev_id = _valid_ev_id()
     state = _make_state(
         draft_response="test",
         draft_confidence=0.8,
@@ -208,9 +216,8 @@ def test_critic_replaces_prior_feedback() -> None:
     result = run_critic(state)
     # The prior feedback string must NOT appear in the new feedback
     assert "PRIOR FEEDBACK FROM EARLIER RUN" not in result.critic_feedback
-    # On an empty citations list, critic passes hard check with empty feedback
-    assert result.critic_passed is True
-    assert result.critic_feedback == ""
+    assert result.critic_passed is False
+    assert "NO_CITATIONS" in result.critic_feedback
 
 
 # 12. Very long excerpt (500 chars) — no crash, grounding check handles it

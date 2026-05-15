@@ -20,141 +20,21 @@ Every tool return includes citation dicts so every factual claim is traceable.
 
 from __future__ import annotations
 
-import re
-import sqlite3
 from typing import Any
 
-try:
-    from pypdf import PdfReader
-
-    _HAS_PYPDF = True
-except ImportError:
-    _HAS_PYPDF = False
-
-from nightwave.case import DEFAULT_DB, DEFAULT_EVIDENCE_DIR, load_case_json
+from nightwave.case_store import CaseIndex, tokenize
 
 # ─── Tokenizer (defined before _CaseIndex so the class can reference it) ─────
 
 
 def _tokenize(text: str) -> list[str]:
-    return re.findall(r"\b[a-z0-9]+\b", text.lower())
+    return tokenize(text)
 
 
 # ─── In-memory index (built once at module load) ──────────────────────────────
 
 
-class _CaseIndex:
-    """Pre-computed views over the case data. Avoids re-reading files per call."""
-
-    def __init__(self) -> None:
-        self.case = load_case_json()
-        self.case_id: str = self.case["case_id"]
-
-        self.entities_by_id: dict[str, dict] = {}
-        self.entities_by_name: dict[str, dict] = {}
-        for e in self.case.get("entities", []):
-            self.entities_by_id[e["id"]] = e
-            self.entities_by_name[e.get("name", "").lower().strip()] = e
-            for alias in e.get("aliases", []):
-                if alias:
-                    self.entities_by_name[alias.lower().strip()] = e
-
-        self.citations_by_artifact: dict[str, list[dict]] = {}
-        for c in self.case.get("citations", []):
-            aid = c.get("artifact_id", "")
-            if aid:
-                self.citations_by_artifact.setdefault(aid, []).append(c)
-
-        self.evidence_by_id: dict[str, dict] = {}
-        for ev in self.case.get("evidence", []):
-            self.evidence_by_id[ev["evidence_id"]] = ev
-
-        self.leads: list[dict] = self.case.get("leads", [])
-        self.hypotheses: list[dict] = self.case.get("hypotheses", [])
-        self.relationships: list[dict] = self.case.get("relationships", [])
-        self.events: list[dict] = self.case.get("events", [])
-
-        self.corpus: list[dict[str, Any]] = self._build_corpus()
-        self._avg_dl: float = (
-            sum(len(_tokenize(d["text"])) for d in self.corpus) / len(self.corpus)
-            if self.corpus
-            else 100.0
-        )
-
-    def _build_corpus(self) -> list[dict[str, Any]]:
-        corpus: list[dict[str, Any]] = []
-        for ev in self.case.get("evidence", []):
-            ev_id = ev["evidence_id"]
-            filename = ev["filename"]
-            path = DEFAULT_EVIDENCE_DIR / filename
-
-            if ev.get("mime_type") == "text/plain" or path.suffix == ".txt":
-                try:
-                    text = path.read_text(encoding="utf-8", errors="replace")
-                    lines = text.splitlines()
-                    for i in range(0, len(lines), 5):
-                        chunk = " ".join(lines[i : i + 5]).strip()
-                        if chunk:
-                            corpus.append(
-                                {
-                                    "evidence_id": ev_id,
-                                    "filename": filename,
-                                    "text": chunk,
-                                    "locator": {
-                                        "type": "text",
-                                        "line_start": i + 1,
-                                        "line_end": min(i + 5, len(lines)),
-                                    },
-                                    "source_type": "text",
-                                    "is_summary": False,
-                                }
-                            )
-                except Exception:
-                    pass
-
-            elif ev.get("mime_type") == "application/pdf" or path.suffix == ".pdf":
-                if _HAS_PYPDF:
-                    try:
-                        reader = PdfReader(str(path))
-                        for pg_num, page in enumerate(reader.pages, 1):
-                            text = (page.extract_text() or "").strip()
-                            if text:
-                                corpus.append(
-                                    {
-                                        "evidence_id": ev_id,
-                                        "filename": filename,
-                                        "text": text,
-                                        "locator": {"type": "pdf", "page": pg_num},
-                                        "source_type": "document",
-                                        "is_summary": False,
-                                    }
-                                )
-                    except Exception:
-                        pass
-
-            # Always include ai_summary + description as fallback / supplemental
-            summary = f"{ev.get('description', '')} {ev.get('ai_summary', '')}".strip()
-            if summary:
-                corpus.append(
-                    {
-                        "evidence_id": ev_id,
-                        "filename": filename,
-                        "text": summary,
-                        "locator": {"type": "text", "line_start": 1, "line_end": 1},
-                        "source_type": ev.get("evidence_type", "unknown"),
-                        "is_summary": True,
-                    }
-                )
-
-        return corpus
-
-    def get_db(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(DEFAULT_DB))
-        conn.row_factory = sqlite3.Row
-        return conn
-
-
-_INDEX = _CaseIndex()
+_INDEX = CaseIndex()
 
 
 # ─── BM25-ish scoring ─────────────────────────────────────────────────────────
@@ -186,7 +66,7 @@ def _bm25_score(query_tokens: list[str], doc: dict[str, Any]) -> float:
 # ─── Tools ───────────────────────────────────────────────────────────────────
 
 
-def search_evidence(query: str, k: int = 5) -> list[dict[str, Any]]:
+def search_evidence(query: str, k: int = 5, case_id: str | None = None) -> list[dict[str, Any]]:
     """BM25-ish search over the in-memory evidence corpus.
 
     Returns up to k hits, each with evidence_id, filename, excerpt, locator,
@@ -196,7 +76,12 @@ def search_evidence(query: str, k: int = 5) -> list[dict[str, Any]]:
     if not q_tokens:
         return []
 
-    scored = [(doc, _bm25_score(q_tokens, doc)) for doc in _INDEX.corpus]
+    active_case_id = case_id or _INDEX.case_id
+    scored = [
+        (doc, _bm25_score(q_tokens, doc))
+        for doc in _INDEX.corpus
+        if doc.get("case_id") == active_case_id
+    ]
     scored.sort(key=lambda x: x[1], reverse=True)
 
     results: list[dict[str, Any]] = []
@@ -207,6 +92,7 @@ def search_evidence(query: str, k: int = 5) -> list[dict[str, Any]]:
         results.append(
             {
                 "evidence_id": doc["evidence_id"],
+                "case_id": active_case_id,
                 "filename": doc["filename"],
                 "excerpt": doc["text"][:400],
                 "locator": doc["locator"],
@@ -219,15 +105,16 @@ def search_evidence(query: str, k: int = 5) -> list[dict[str, Any]]:
     return results
 
 
-def get_entity(name_or_id: str) -> dict[str, Any] | None:
+def get_entity(name_or_id: str, case_id: str | None = None) -> dict[str, Any] | None:
     """Look up an entity by id or name (case-insensitive, alias-aware).
 
     Returns the entity record with citations attached, or None if not found.
     """
     needle = name_or_id.strip()
-    entity = _INDEX.entities_by_id.get(needle) or _INDEX.entities_by_name.get(
-        needle.lower()
-    )
+    active_case_id = case_id or _INDEX.case_id
+    if active_case_id != _INDEX.case_id:
+        return None
+    entity = _INDEX.entities_by_id.get(needle) or _INDEX.entities_by_name.get(needle.lower())
 
     if entity is None:
         # Substring match as last resort
@@ -244,13 +131,16 @@ def get_entity(name_or_id: str) -> dict[str, Any] | None:
     return result
 
 
-def query_graph(question: str) -> list[dict[str, Any]]:
+def query_graph(question: str, case_id: str | None = None) -> list[dict[str, Any]]:
     """Resolve a structural question against the case graph.
 
     Routes to typed sub-queries; never lets the LLM write SQL.
     Covers: entity connections, timelines, leads, hypotheses.
     """
     q = question.lower()
+    active_case_id = case_id or _INDEX.case_id
+    if active_case_id != _INDEX.case_id:
+        return []
     results: list[dict[str, Any]] = []
 
     def _connected_to(entity_id: str) -> list[dict]:
@@ -349,8 +239,11 @@ def query_graph(question: str) -> list[dict[str, Any]]:
     return results[:25]  # cap to stay within context window
 
 
-def list_citations(artifact_id: str) -> list[dict[str, Any]]:
+def list_citations(artifact_id: str, case_id: str | None = None) -> list[dict[str, Any]]:
     """Return every citation pointing to artifact_id, with evidence metadata attached."""
+    active_case_id = case_id or _INDEX.case_id
+    if active_case_id != _INDEX.case_id:
+        return []
     citations = _INDEX.citations_by_artifact.get(artifact_id, [])
     result = []
     for c in citations:

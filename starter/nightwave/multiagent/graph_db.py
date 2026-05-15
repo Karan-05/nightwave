@@ -18,6 +18,10 @@ _mode: str = "memory"  # "neo4j" | "memory"
 _initialized: bool = False
 
 
+def _requires_neo4j() -> bool:
+    return os.getenv("NIGHTWAVE_REQUIRE_NEO4J", "").lower() in {"1", "true", "yes"}
+
+
 def _get_driver():
     global _driver, _mode, _initialized
     if _initialized:
@@ -36,6 +40,8 @@ def _get_driver():
         _mode = "neo4j"
         print(f"[graph_db] Connected to Neo4j at {uri}")
     except Exception as exc:
+        if _requires_neo4j():
+            raise RuntimeError(f"Neo4j is required but unavailable at {uri}: {exc}") from exc
         print(f"[graph_db] Neo4j unavailable ({exc}); using in-memory fallback")
         _driver = None
         _mode = "memory"

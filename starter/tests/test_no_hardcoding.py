@@ -58,15 +58,22 @@ def _call_args(path: Path) -> list[tuple[str, str]]:
         if not isinstance(node, ast.Call):
             continue
         func = node.func
-        name = func.attr if isinstance(func, ast.Attribute) else (
-            func.id if isinstance(func, ast.Name) else ""
+        name = (
+            func.attr
+            if isinstance(func, ast.Attribute)
+            else (func.id if isinstance(func, ast.Name) else "")
         )
-        if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+        if (
+            node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        ):
             results.append((name, node.args[0].value))
     return results
 
 
 # ── Entity IDs must not be hardcoded ─────────────────────────────────────────
+
 
 def test_no_hardcoded_entity_ids() -> None:
     """Entity IDs like 'ent-kyle-lawrence' must not be hardcoded in subagent code."""
@@ -81,6 +88,7 @@ def test_no_hardcoded_entity_ids() -> None:
 
 # ── Forbidden _cypher_entity_context args ─────────────────────────────────────
 
+
 def test_no_hardcoded_cypher_entity_names() -> None:
     """_cypher_entity_context('madison') / ('fields') must not appear in subagent code."""
     for path in _subagent_files():
@@ -93,6 +101,7 @@ def test_no_hardcoded_cypher_entity_names() -> None:
 
 
 # ── Platform keywords must not be in dispatch tuples/lists ────────────────────
+
 
 def test_no_platform_names_in_dispatch_lists() -> None:
     """Platform names must not appear as members of Python tuple/list dispatch tables.

@@ -29,8 +29,18 @@ def _classify(question: str) -> str:
     q = question.lower()
     if any(w in q for w in ("wearing", "last seen", "clothing", "physical description")):
         return "retrieval"
-    if any(w in q for w in ("same person", "separate", "two offenders", "same offender",
-                             "groom", "platform", "app")):
+    if any(
+        w in q
+        for w in (
+            "same person",
+            "separate",
+            "two offenders",
+            "same offender",
+            "groom",
+            "platform",
+            "app",
+        )
+    ):
         return "multi_hop"
     if any(w in q for w in ("next", "action", "investigat", "priorit", "rank", "step")):
         return "planning"
@@ -55,8 +65,8 @@ def _generate_secondary_queries(question: str, q_class: str) -> list[str]:
         # For planning questions: search for lead and action evidence
         # Extract action-like verbs from the question
         action_words = re.findall(
-            r'\b(forensic|subpoena|surveillance|extraction|arrest|interview|warrant|'
-            r'canvass|search|seize|identify|trace|locate)\w*\b',
+            r"\b(forensic|subpoena|surveillance|extraction|arrest|interview|warrant|"
+            r"canvass|search|seize|identify|trace|locate)\w*\b",
             question.lower(),
         )
         for w in list(dict.fromkeys(action_words))[:2]:
@@ -79,12 +89,12 @@ def run_retriever(state: AgentState, k: int = 10) -> AgentState:
     secondary_qs = _generate_secondary_queries(state.question, q_class)
 
     # Primary search
-    primary_hits = hybrid_search(state.question, k=k)
+    primary_hits = hybrid_search(state.question, k=k, case_id=state.case_id)
 
     # Secondary searches — merged before primary so they rank higher
     secondary_hits: list[dict] = []
     for sq in secondary_qs:
-        secondary_hits.extend(hybrid_search(sq, k=4))
+        secondary_hits.extend(hybrid_search(sq, k=4, case_id=state.case_id))
 
     # Dedup by (evidence_id, locator): secondary first = higher effective rank
     seen: set[str] = set()
@@ -111,7 +121,7 @@ def run_retriever(state: AgentState, k: int = 10) -> AgentState:
     merged = diverse + deferred
 
     chunks: list[RetrievedChunk] = []
-    for h in merged[:k + 4]:
+    for h in merged[: k + 4]:
         ev_id = h["evidence_id"]
         filename = h.get("filename", "")
         source_path = str(DEFAULT_EVIDENCE_DIR / filename) if filename else ""
@@ -123,15 +133,19 @@ def run_retriever(state: AgentState, k: int = 10) -> AgentState:
                 excerpt=h.get("excerpt", "")[:400],
                 score=h.get("rrf_score", 0.0),
                 source="rrf",
+                case_id=state.case_id,
             )
         )
 
     state.retrieved_chunks = chunks
-    state.trace.append({
-        "step": "retriever",
-        "question_class": q_class,
-        "hits": len(chunks),
-        "secondary_queries": secondary_qs,
-        "top_ids": [c.evidence_id for c in chunks[:4]],
-    })
+    state.trace.append(
+        {
+            "step": "retriever",
+            "case_id": state.case_id,
+            "question_class": q_class,
+            "hits": len(chunks),
+            "secondary_queries": secondary_qs,
+            "top_ids": [c.evidence_id for c in chunks[:4]],
+        }
+    )
     return state

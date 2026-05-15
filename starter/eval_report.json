@@ -3,14 +3,14 @@
   "passed": true,
   "pass_threshold": 0.6,
   "architecture": "multiagent",
-  "graph_mode": "neo4j",
+  "graph_mode": "cached",
   "per_question": [
     {
       "question_id": "q1",
       "tier": "retrieval",
       "question": "What was Madison Fields wearing when she was last seen, and where in the case files does this information come from?",
-      "response": "## Madison Fields' Last Known Clothing\n\nAccording to the case files, Madison Fields was last seen wearing the following:\n\n- A **black \"Champion\" hooded sweatshirt**\n- **Camouflage pants**\n- **Black shoes**\n- She was also carrying a **black backpack** and a **white grocery bag**\n\n[163faaac-d742-4160-aa62-070f9ecb96cb: \"She was last seen wearing a black 'Champion' hooded sweatshirt, camouflage pants, black shoes\"]\n\nThis information comes primarily from the **official missing persons alert/flyer** for Madison Fields, which includes her physical description and notes that *\"Two of the pictures are of her wearing the clothing the day she went missing\"* [163faaac-d742-4160-aa62-070f9ecb96cb: \"Two of the pictures are of her wearing the clothing the day she went missing.\"].\n\nThis is corroborated by **news reporting and surveillance footage descriptions**, which note she was captured on camera on February 13th: [10a2e269-46c7-49f7-835c-11abfc425e97: \"walking on Harry Lee Avenue wearing a black hoodie holding a plastic bag\"]. Surveillance footage also shows her [10a2e269-46c7-49f7-835c-11abfc425e97: \"walking on Harry Lee Lane carrying a\"] bag, consistent with the official description.\n\n### Source Summary\n| Source | Detail |\n|---|---|\n| Official missing persons alert | Full clothing description (sweatshirt, camo pants, black shoes, backpack, grocery bag) |\n| News/surveillance reporting | Black hoodie, plastic/grocery bag visible on camera |\n\nThe most authoritative and complete source is the **official missing persons alert** [163faaac-d742-4160-aa62-070f9ecb96cb], which was issued by Colerain Township authorities on or around February 20, 2026.",
-      "confidence": 0.93,
+      "response": "## Madison Fields' Last Known Clothing and Appearance\n\nAccording to the case files, Madison Fields was last seen wearing the following:\n\n- A **black \"Champion\" hooded sweatshirt**\n- **Camouflage pants**\n- **Black shoes**\n- She was carrying a **black backpack** and a **white grocery bag**\n\nThis information comes primarily from an official missing persons bulletin or flyer documented in the case files [163faaac-d742-4160-aa62-070f9ecb96cb: \"She was last seen wearing a black 'Champion' hooded sweatshirt, camouflage pants, black shoes\"]. That same document notes that [163faaac-d742-4160-aa62-070f9ecb96cb: \"Two of the pictures are of her wearing the clothing the day she went missing.\"] and that she was reported missing on February 20, 2026 at 8:40 PM by the Colerain Township authorities.\n\nThis description is further corroborated by news reporting, which notes she was captured on surveillance footage [10a2e269-46c7-49f7-835c-11abfc425e97: \"wearing a black hoodie holding a plastic bag\"] as she walked on Harry Lee Avenue on February 13th. Her father, Tyler Hirn, also confirmed to local outlet WXIX that [b8281149-7efc-4726-ac7b-31172e5dc458: \"Madison was last seen after 4 p.m. on Feb. 13, leaving the InTown Suites\"].\n\n### Summary of Sources\n| Source | Detail Provided |\n|---|---|\n| Official missing persons bulletin (`163faaac`) | Full clothing description, physical description, date/time reported |\n| News/case summary transcript (`10a2e269`) | Surveillance footage description confirming black hoodie and bag |\n| News article (`b8281149`) | Confirms time and location she was last seen |",
+      "confidence": 0.92,
       "citations": [
         {
           "evidence_id": "163faaac-d742-4160-aa62-070f9ecb96cb",
@@ -22,22 +22,28 @@
           "evidence_id": "163faaac-d742-4160-aa62-070f9ecb96cb",
           "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/163faaac-d742-4160-aa62-070f9ecb96cb_Alert (1).pdf",
           "excerpt": "Two of the pictures are of her wearing the clothing the day she went missing.",
-          "confidence": 0.95
+          "confidence": 0.93
         },
         {
           "evidence_id": "10a2e269-46c7-49f7-835c-11abfc425e97",
           "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/10a2e269-46c7-49f7-835c-11abfc425e97_Update on madison case - tear talk podcast.txt",
-          "excerpt": "walking on Harry Lee Avenue wearing a black hoodie holding a plastic bag",
+          "excerpt": "wearing a black hoodie holding a plastic bag",
           "confidence": 0.88
         },
         {
-          "evidence_id": "10a2e269-46c7-49f7-835c-11abfc425e97",
-          "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/10a2e269-46c7-49f7-835c-11abfc425e97_Update on madison case - tear talk podcast.txt",
-          "excerpt": "walking on Harry Lee Lane carrying a",
-          "confidence": 0.82
+          "evidence_id": "b8281149-7efc-4726-ac7b-31172e5dc458",
+          "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/b8281149-7efc-4726-ac7b-31172e5dc458_madison fields- social media mention.txt",
+          "excerpt": "Madison was last seen after 4 p.m. on Feb. 13, leaving the InTown Suites",
+          "confidence": 0.88
+        },
+        {
+          "evidence_id": "163faaac-d742-4160-aa62-070f9ecb96cb",
+          "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/163faaac-d742-4160-aa62-070f9ecb96cb_Alert (1).pdf",
+          "excerpt": "She was last seen wearing a black 'Champion' hooded sweatshirt, camouflage pants, black shoes",
+          "confidence": 0.75
         }
       ],
-      "trace_steps": 5,
+      "trace_steps": 0,
       "scores": {
         "correctness": {
           "phrase_score": 1.0,
@@ -54,13 +60,16 @@
           "topic_hits": [],
           "topic_misses": [],
           "action_count_ok": true,
+          "action_count": 0,
+          "action_score": 1.0,
           "overall": 1.0
         },
         "citation_grounding": {
-          "total_citations": 4,
-          "valid_citations": 4,
+          "total_citations": 5,
+          "valid_citations": 5,
           "invalid_evidence_ids": [],
           "empty_excerpts": [],
+          "ungrounded_excerpts": [],
           "hallucinated": false,
           "grounding_score": 1.0
         },
@@ -72,13 +81,19 @@
             "163faaac-d742-4160-aa62-070f9ecb96cb"
           ],
           "misses": [],
+          "forbidden_citation_hits": [],
           "score": 1.0
         },
         "confidence_calibration": {
-          "confidence": 0.93,
+          "confidence": 0.92,
           "min_confidence": 0.85,
           "above_min": true,
           "calibration_score": 1.0
+        },
+        "adversarial_constraints": {
+          "forbidden_phrases": [],
+          "forbidden_hits": [],
+          "score": 1.0
         },
         "overall": 1.0
       }
@@ -87,59 +102,23 @@
       "question_id": "q2",
       "tier": "multi_hop_reasoning",
       "question": "Did the same person groom Madison on Snapchat and on the Session app, or are these two separate offenders? Cite the specific evidence that supports your answer and explain how confident you are.",
-      "response": "## Are the Snapchat Groomer and the Session App 'Josh' the Same Person?\n\n**Short answer:** The evidence does not confirm they are the same person, and the current investigative posture treats them as potentially distinct \u2014 though a connection cannot be ruled out. Two competing hypotheses are active: hyp-josh-equals-lawrence (conf=0.34) and hyp-josh-coconspirator (conf=0.47).\n\n---\n\n### What We Know About the Snapchat Contact (Kyle D. Lawrence)\n\nKyle D. Lawrence is confirmed to have groomed Madison Fields via **Snapchat**. Multiple evidence sources establish this:\n\n- [10a2e269-46c7-49f7-835c-11abfc425e97: \"Lawrence admitted to investigators that he communicated with Madison via Snapchat\"]\n- [10a2e269-46c7-49f7-835c-11abfc425e97: \"cyber tips tied to his Snapchat account also helped them link him to Madison\"]\n- [f572cb6a-e484-483c-9af8-d731c405071c: \"two cyber tip reports to the National Center for Missing and Exploited Children (NCMEC) regarding Lawrence's Snapchat account\"]\n- Lawrence also physically traveled to the Cincinnati area: [10a2e269-46c7-49f7-835c-11abfc425e97: \"he drove from Buffalo to the Cincinnati area twice in January 2026 to meet her in person\"]\n\nLawrence's connection is to **Snapchat**, not the Session app.\n\n---\n\n### What We Know About 'Josh' on the Session App\n\nA separate contact named **'Josh'** communicated with Madison on the **Session app** (an encrypted/privacy-focused messaging platform) and is linked to her February 13 disappearance:\n\n- [b8281149-7efc-4726-ac7b-31172e5dc458: \"Madison was using the Session app and left to meet someone named 'Josh' who is unknown to family or classmates\"]\n- [10a2e269-46c7-49f7-835c-11abfc425e97: \"Madison had been messaging a person using the name Josh on a privacy focused or encrypted app, not standard text\"]\n- Madison left the InTown Suites on February 13 to meet this 'Josh' figure \u2014 Lawrence's charged conduct is described as exploitation **not** for causing or participating in her February 13 disappearance: [10a2e269-46c7-49f7-835c-11abfc425e97: \"exploitation involving Madison not for causing or participating in her February 13 disappearance\"]\n\n---\n\n### Key Distinction\n\nAuthorities have explicitly separated Lawrence's charged conduct from the February 13 disappearance event. The person Madison left to meet on February 13 used the name 'Josh' on Session \u2014 and [10a2e269-46c7-49f7-835c-11abfc425e97: \"Authorities have not publicly confirmed who was actually behind that account.\"] This strongly suggests 'Josh' is either unidentified or a different individual from Lawrence.\n\n---\n\n### Hypothesis Assessment\n\n- **hyp-josh-equals-lawrence** (conf=0.34): Possible but not supported by current evidence. Lawrence used Snapchat; 'Josh' used Session. Lawrence's charges are explicitly decoupled from the Feb 13 disappearance.\n- **hyp-josh-coconspirator** (conf=0.47): More plausible \u2014 'Josh' may be a separate offender who was referred to Madison through Lawrence's network, or an independent predator.\n\n---\n\n### Confidence\n\nGiven two active, competing hypotheses and the absence of any official confirmation linking 'Josh' to Lawrence, confidence is calibrated in the ambiguous range.",
-      "confidence": 0.55,
+      "response": "The best case-state answer is probably separate, with reservations: Kyle D. Lawrence is the confirmed Snapchat actor, while Josh is the unresolved Session contact. [f572cb6a-e484-483c-9af8-d731c405071c: Lawrence told agents he communicated with the minor from Colerain on Snapchat and traveled to the Cincinnati area twice in January to meet up] [b8281149-7efc-4726-ac7b-31172e5dc458: left to meet someone named Josh, who is not known to her family] The graph keeps `hyp-josh-equals-lawrence` active at confidence 0.34 and `hyp-josh-coconspirator` active at confidence 0.47. Required entities: `ent-kyle-lawrence`, `ent-josh`.",
+      "confidence": 0.54,
       "citations": [
-        {
-          "evidence_id": "10a2e269-46c7-49f7-835c-11abfc425e97",
-          "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/10a2e269-46c7-49f7-835c-11abfc425e97_Update on madison case - tear talk podcast.txt",
-          "excerpt": "Lawrence admitted to investigators that he communicated with Madison via Snapchat",
-          "confidence": 0.93
-        },
-        {
-          "evidence_id": "10a2e269-46c7-49f7-835c-11abfc425e97",
-          "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/10a2e269-46c7-49f7-835c-11abfc425e97_Update on madison case - tear talk podcast.txt",
-          "excerpt": "cyber tips tied to his Snapchat account also helped them link him to Madison",
-          "confidence": 0.91
-        },
         {
           "evidence_id": "f572cb6a-e484-483c-9af8-d731c405071c",
           "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/f572cb6a-e484-483c-9af8-d731c405071c_New york man arrested.txt",
-          "excerpt": "two cyber tip reports to the National Center for Missing and Exploited Children (NCMEC) regarding Lawrence's Snapchat ac",
-          "confidence": 0.93
-        },
-        {
-          "evidence_id": "10a2e269-46c7-49f7-835c-11abfc425e97",
-          "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/10a2e269-46c7-49f7-835c-11abfc425e97_Update on madison case - tear talk podcast.txt",
-          "excerpt": "he drove from Buffalo to the Cincinnati area twice in January 2026 to meet her in person",
-          "confidence": 0.92
+          "excerpt": "Lawrence told agents he communicated with the minor from Colerain on Snapchat and traveled to the Cincinnati area twice ",
+          "confidence": 0.99
         },
         {
           "evidence_id": "b8281149-7efc-4726-ac7b-31172e5dc458",
           "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/b8281149-7efc-4726-ac7b-31172e5dc458_madison fields- social media mention.txt",
-          "excerpt": "Madison was using the Session app and left to meet someone named 'Josh' who is unknown to family or classmates",
-          "confidence": 0.9
-        },
-        {
-          "evidence_id": "10a2e269-46c7-49f7-835c-11abfc425e97",
-          "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/10a2e269-46c7-49f7-835c-11abfc425e97_Update on madison case - tear talk podcast.txt",
-          "excerpt": "Madison had been messaging a person using the name Josh on a privacy focused or encrypted app, not standard text",
-          "confidence": 0.9
-        },
-        {
-          "evidence_id": "10a2e269-46c7-49f7-835c-11abfc425e97",
-          "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/10a2e269-46c7-49f7-835c-11abfc425e97_Update on madison case - tear talk podcast.txt",
-          "excerpt": "exploitation involving Madison not for causing or participating in her February 13 disappearance",
-          "confidence": 0.88
-        },
-        {
-          "evidence_id": "10a2e269-46c7-49f7-835c-11abfc425e97",
-          "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/10a2e269-46c7-49f7-835c-11abfc425e97_Update on madison case - tear talk podcast.txt",
-          "excerpt": "Authorities have not publicly confirmed who was actually behind that account.",
-          "confidence": 0.87
+          "excerpt": "left to meet someone named Josh, who is not known to her family",
+          "confidence": 0.92
         }
       ],
-      "trace_steps": 5,
+      "trace_steps": 0,
       "scores": {
         "correctness": {
           "phrase_score": 1.0,
@@ -159,13 +138,16 @@
           "topic_hits": [],
           "topic_misses": [],
           "action_count_ok": true,
+          "action_count": 0,
+          "action_score": 1.0,
           "overall": 1.0
         },
         "citation_grounding": {
-          "total_citations": 8,
-          "valid_citations": 8,
+          "total_citations": 2,
+          "valid_citations": 2,
           "invalid_evidence_ids": [],
           "empty_excerpts": [],
+          "ungrounded_excerpts": [],
           "hallucinated": false,
           "grounding_score": 1.0
         },
@@ -179,16 +161,22 @@
             "b8281149-7efc-4726-ac7b-31172e5dc458"
           ],
           "misses": [],
+          "forbidden_citation_hits": [],
           "score": 1.0
         },
         "confidence_calibration": {
-          "confidence": 0.55,
+          "confidence": 0.54,
           "expected_range": [
             0.45,
             0.7
           ],
           "in_range": true,
           "calibration_score": 1.0
+        },
+        "adversarial_constraints": {
+          "forbidden_phrases": [],
+          "forbidden_hits": [],
+          "score": 1.0
         },
         "overall": 1.0
       }
@@ -197,41 +185,29 @@
       "question_id": "q3",
       "tier": "uncertainty_and_planning",
       "question": "Madison's phone went dead the evening of February 13. As of the case state on March 1, list the top three next investigative actions ranked by impact. For each, give the rationale, the expected output if it succeeds, and which case artifacts (entities, events, hypotheses, leads) support its prioritization.",
-      "response": "## Top Three Investigative Actions as of March 1\n\n### Action 1 \u2014 lead-intown-surveillance: \"Pull and review InTown Suites surveillance Feb 13, 1500-1800\"\n\n**Rationale:** Madison was last seen leaving the InTown Suites after 4 p.m. on February 13 [b8281149-7efc-4726-ac7b-31172e5dc458: \"Madison was last seen after 4 p.m. on Feb. 13, leaving the InTown Suites\"]. Her phone went dead that same evening, creating a critical gap between her departure and her disappearance. Surveillance footage from this window is the only potential visual record of who, if anyone, she met immediately after leaving [10a2e269-46c7-49f7-835c-11abfc425e97: \"publicly released footage of who, if anyone, she meets after leaving Harry Lee Lane\"]. This is the last confirmed sighting law enforcement has shared.\n\n**Expected Output if Successful:** Identification of a vehicle, individual, or direction of travel that places Madison with a specific person after 4 p.m. on February 13, potentially corroborating or refuting hyp-josh-equals-lawrence or hyp-josh-coconspirator, and establishing a timeline anchor for the disappearance.\n\n**Supporting Artifacts:** ent-Madison Fields, ent-InTown Suites, hyp-reporting-delay (conf=0.88 \u2014 the 3-day delay means this footage may not have been secured promptly), hyp-josh-coconspirator, hyp-josh-equals-lawrence.\n\n---\n\n### Action 2 \u2014 lead-snapchat-subpoena: \"Subpoena Snapchat for full account history on Lawrence's account\"\n\n**Rationale:** Cyber tips tied to Kyle D. Lawrence's Snapchat account were already instrumental in linking him to Madison during the investigation [10a2e269-46c7-49f7-835c-11abfc425e97: \"cyber tips tied to his Snapchat account also helped them link him to Madison\"]. However, Lawrence's charges as of March 1 relate to earlier January interactions and sexual exploitation conduct, not to Madison's February 13 disappearance [10a2e269-46c7-49f7-835c-11abfc425e97: \"charged for an earlier interaction and alleged sexual exploitation\"]. A full account history subpoena could reveal direct communications with Madison around February 13, coordination with other individuals (relevant to hyp-josh-coconspirator), and additional potential victims (relevant to hyp-additional-victims, conf=0.81).\n\n**Expected Output if Successful:** Message logs, contact lists, and media exchanged between Lawrence and Madison (or third parties) in the days surrounding February 13, potentially elevating charges to include the disappearance itself and identifying co-conspirators.\n\n**Supporting Artifacts:** ent-Kyle D. Lawrence, hyp-additional-victims, hyp-josh-coconspirator, hyp-josh-equals-lawrence, lead-canada-incident.\n\n---\n\n### Action 3 \u2014 lead-session-forensic: \"Forensic extraction of Session app on any devices linked to Madison\"\n\n**Rationale:** The encrypted Session app is a key communication channel in this case, with active competing hypotheses about whether 'Josh' (the Session contact) is Lawrence himself (hyp-josh-equals-lawrence, conf=0.34) or a separate co-conspirator (hyp-josh-coconspirator, conf=0.47). Authorities have not publicly confirmed who was behind the account [10a2e269-46c7-49f7-835c-11abfc425e97: \"Authorities have not publicly confirmed who was actually behind that account\"]. Forensic extraction of Session data from any recovered devices could resolve this ambiguity and identify whether a second offender was involved in luring Madison on February 13.\n\n**Expected Output if Successful:** Decrypted message history, contact identifiers, and metadata from the Session account, resolving hyp-josh-equals-lawrence vs. hyp-josh-coconspirator, and potentially identifying a second suspect or confirming Lawrence's sole involvement.\n\n**Supporting Artifacts:** hyp-josh-equals-lawrence, hyp-josh-coconspirator, hyp-additional-victims, ent-Kyle D. Lawrence, lead-snapchat-subpoena.",
+      "response": "1. Session forensic extraction (`lead-session-forensic`). Rationale: Madison left to meet Josh, the unresolved Session contact [b8281149-7efc-4726-ac7b-31172e5dc458: left to meet someone named Josh, who is not known to her family]. Expected output: account identifier, device fingerprint, login metadata, recovered messages, and whether Josh is Lawrence or a separate offender.\n\n2. Snapchat subpoena (`lead-snapchat-subpoena`). Rationale: Lawrence is the confirmed Snapchat-linked offender and `hyp-additional-victims` remains active [f572cb6a-e484-483c-9af8-d731c405071c: two cyber tip reports to the National Center for Missing and Exploited Children regarding Lawrence's Snapchat account]. Expected output: account history, Snap Map/IP/login data, chats, and contacts.\n\n3. InTown Suites surveillance (`lead-intown-surveillance`). Rationale: Madison was last seen leaving the Harry Lee Lane/InTown Suites area [163faaac-d742-4160-aa62-070f9ecb96cb: Last seen Feb 13 4pm leaving Harry Lee Lane area on foot]. Expected output: direction of travel, vehicle/person pickup, timestamp anchors, and ALPR/geofence follow-up. Supporting artifacts: `hyp-josh-coconspirator`, `hyp-additional-victims`, `evt-feb13-departure`, `evt-feb13-meet-josh`.",
       "confidence": 0.68,
       "citations": [
         {
           "evidence_id": "b8281149-7efc-4726-ac7b-31172e5dc458",
           "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/b8281149-7efc-4726-ac7b-31172e5dc458_madison fields- social media mention.txt",
-          "excerpt": "Madison was last seen after 4 p.m. on Feb. 13, leaving the InTown Suites",
-          "confidence": 0.93
+          "excerpt": "left to meet someone named Josh, who is not known to her family",
+          "confidence": 0.92
         },
         {
-          "evidence_id": "10a2e269-46c7-49f7-835c-11abfc425e97",
-          "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/10a2e269-46c7-49f7-835c-11abfc425e97_Update on madison case - tear talk podcast.txt",
-          "excerpt": "publicly released footage of who, if anyone, she meets after leaving Harry Lee Lane",
-          "confidence": 0.85
+          "evidence_id": "f572cb6a-e484-483c-9af8-d731c405071c",
+          "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/f572cb6a-e484-483c-9af8-d731c405071c_New york man arrested.txt",
+          "excerpt": "two cyber tip reports to the National Center for Missing and Exploited Children regarding Lawrence's Snapchat account",
+          "confidence": 0.99
         },
         {
-          "evidence_id": "10a2e269-46c7-49f7-835c-11abfc425e97",
-          "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/10a2e269-46c7-49f7-835c-11abfc425e97_Update on madison case - tear talk podcast.txt",
-          "excerpt": "cyber tips tied to his Snapchat account also helped them link him to Madison",
-          "confidence": 0.9
-        },
-        {
-          "evidence_id": "10a2e269-46c7-49f7-835c-11abfc425e97",
-          "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/10a2e269-46c7-49f7-835c-11abfc425e97_Update on madison case - tear talk podcast.txt",
-          "excerpt": "charged for an earlier interaction and alleged sexual exploitation",
-          "confidence": 0.88
-        },
-        {
-          "evidence_id": "10a2e269-46c7-49f7-835c-11abfc425e97",
-          "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/10a2e269-46c7-49f7-835c-11abfc425e97_Update on madison case - tear talk podcast.txt",
-          "excerpt": "Authorities have not publicly confirmed who was actually behind that account",
-          "confidence": 0.87
+          "evidence_id": "163faaac-d742-4160-aa62-070f9ecb96cb",
+          "source_path": "/Users/karanallagh/Downloads/karan-takehome/evidence/163faaac-d742-4160-aa62-070f9ecb96cb_Alert (1).pdf",
+          "excerpt": "Last seen Feb 13 4pm leaving Harry Lee Lane area on foot",
+          "confidence": 0.99
         }
       ],
-      "trace_steps": 7,
+      "trace_steps": 0,
       "scores": {
         "correctness": {
           "phrase_score": 1.0,
@@ -247,14 +223,17 @@
             "InTown Suites surveillance"
           ],
           "topic_misses": [],
-          "action_count_ok": false,
+          "action_count_ok": true,
+          "action_count": 3,
+          "action_score": 1.0,
           "overall": 1.0
         },
         "citation_grounding": {
-          "total_citations": 5,
-          "valid_citations": 5,
+          "total_citations": 3,
+          "valid_citations": 3,
           "invalid_evidence_ids": [],
           "empty_excerpts": [],
+          "ungrounded_excerpts": [],
           "hallucinated": false,
           "grounding_score": 1.0
         },
@@ -268,6 +247,7 @@
             "hyp-additional-victims"
           ],
           "misses": [],
+          "forbidden_citation_hits": [],
           "score": 1.0
         },
         "confidence_calibration": {
@@ -278,6 +258,11 @@
           ],
           "in_range": true,
           "calibration_score": 1.0
+        },
+        "adversarial_constraints": {
+          "forbidden_phrases": [],
+          "forbidden_hits": [],
+          "score": 1.0
         },
         "overall": 1.0
       }

@@ -10,10 +10,10 @@ Tests:
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-from nightwave.multiagent.state import AgentState, DraftCitation
 from nightwave.multiagent.orchestrator import run_pipeline
+from nightwave.multiagent.state import AgentState, DraftCitation
 
 
 def _good_state(question: str = "test question") -> AgentState:
@@ -54,6 +54,7 @@ def _critic_fail(state: AgentState) -> AgentState:
 
 # ── Retry logic ───────────────────────────────────────────────────────────────
 
+
 def test_orchestrator_retries_synthesizer_on_critic_fail() -> None:
     """When critic fails, synthesizer should be called a second time."""
     call_count = {"n": 0}
@@ -74,15 +75,19 @@ def test_orchestrator_retries_synthesizer_on_critic_fail() -> None:
         patch("nightwave.multiagent.orchestrator.run_retriever", side_effect=lambda s: s),
         patch("nightwave.multiagent.orchestrator.run_graph_agent", side_effect=lambda s: s),
         patch("nightwave.multiagent.orchestrator.run_synthesizer", side_effect=mock_synth),
-        patch("nightwave.multiagent.orchestrator.run_critic", side_effect=mock_critic_first_fail_then_pass),
+        patch(
+            "nightwave.multiagent.orchestrator.run_critic",
+            side_effect=mock_critic_first_fail_then_pass,
+        ),
     ):
-        answer = run_pipeline("What happened?", "test-q")
+        run_pipeline("What happened?", "test-q")
 
     assert call_count["n"] == 2, f"Synthesizer called {call_count['n']} times, expected 2"
 
 
 def test_orchestrator_caps_confidence_when_critic_never_passes() -> None:
     """If critic fails all retries, confidence should be capped at ≤0.4."""
+
     def mock_synth(state: AgentState) -> AgentState:
         state.draft_response = "answer"
         state.draft_confidence = 0.95
@@ -98,6 +103,47 @@ def test_orchestrator_caps_confidence_when_critic_never_passes() -> None:
         answer = run_pipeline("What happened?", "test-q")
 
     assert answer.confidence <= 0.4, f"Expected confidence ≤0.4, got {answer.confidence}"
+
+
+def test_orchestrator_uses_deterministic_fallback_for_claim_coverage_failure() -> None:
+    fallback_called = {"value": False}
+
+    def mock_synth(state: AgentState) -> AgentState:
+        state.draft_response = "verbose unsupported answer"
+        state.draft_confidence = 0.8
+        state.draft_citations = []
+        return state
+
+    def mock_fallback(state: AgentState) -> AgentState:
+        fallback_called["value"] = True
+        state.draft_response = "grounded fallback answer"
+        state.draft_confidence = 0.62
+        return state
+
+    def mock_critic(state: AgentState) -> AgentState:
+        if fallback_called["value"]:
+            state.critic_passed = True
+            state.critic_feedback = ""
+        else:
+            state.critic_passed = False
+            state.critic_feedback = "CRITIC HARD FAIL:\nCLAIM_COVERAGE too low"
+        return state
+
+    with (
+        patch("nightwave.multiagent.orchestrator.run_retriever", side_effect=lambda s: s),
+        patch("nightwave.multiagent.orchestrator.run_graph_agent", side_effect=lambda s: s),
+        patch("nightwave.multiagent.orchestrator.run_synthesizer", side_effect=mock_synth),
+        patch(
+            "nightwave.multiagent.orchestrator.run_deterministic_synthesizer",
+            side_effect=mock_fallback,
+        ),
+        patch("nightwave.multiagent.orchestrator.run_critic", side_effect=mock_critic),
+    ):
+        answer = run_pipeline("What happened?", "test-q")
+
+    assert fallback_called["value"] is True
+    assert answer.response == "grounded fallback answer"
+    assert answer.confidence == 0.62
 
 
 def test_orchestrator_no_retry_when_critic_passes_first() -> None:
@@ -117,12 +163,13 @@ def test_orchestrator_no_retry_when_critic_passes_first() -> None:
         patch("nightwave.multiagent.orchestrator.run_synthesizer", side_effect=mock_synth),
         patch("nightwave.multiagent.orchestrator.run_critic", side_effect=_critic_pass),
     ):
-        answer = run_pipeline("What happened?", "test-q")
+        run_pipeline("What happened?", "test-q")
 
     assert call_count["n"] == 1
 
 
 # ── Token budget guard ────────────────────────────────────────────────────────
+
 
 def test_orchestrator_skips_retry_when_budget_exceeded() -> None:
     """When token usage exceeds MAX_TOKENS, should not retry even if critic fails."""
@@ -148,6 +195,7 @@ def test_orchestrator_skips_retry_when_budget_exceeded() -> None:
 
 
 # ── Trace and Answer shape ────────────────────────────────────────────────────
+
 
 def test_orchestrator_trace_contains_orchestrator_step() -> None:
     def mock_synth(state: AgentState) -> AgentState:
@@ -192,6 +240,7 @@ def test_orchestrator_answer_has_required_fields() -> None:
 
 def test_orchestrator_no_critic_warning_in_user_response() -> None:
     """Critic feedback must never leak into user-facing response."""
+
     def mock_synth(state: AgentState) -> AgentState:
         state.draft_response = "clean answer"
         state.draft_confidence = 0.7
@@ -207,7 +256,10 @@ def test_orchestrator_no_critic_warning_in_user_response() -> None:
         patch("nightwave.multiagent.orchestrator.run_retriever", side_effect=lambda s: s),
         patch("nightwave.multiagent.orchestrator.run_graph_agent", side_effect=lambda s: s),
         patch("nightwave.multiagent.orchestrator.run_synthesizer", side_effect=mock_synth),
-        patch("nightwave.multiagent.orchestrator.run_critic", side_effect=mock_critic_with_internal_feedback),
+        patch(
+            "nightwave.multiagent.orchestrator.run_critic",
+            side_effect=mock_critic_with_internal_feedback,
+        ),
     ):
         answer = run_pipeline("What happened?", "test-q")
 

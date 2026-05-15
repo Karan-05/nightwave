@@ -12,6 +12,7 @@ Keys.*
 
 # Runtime artifacts (keep eval reports; exclude live trace)
 starter/agent_trace.jsonl
+starter/agent_metrics.json
 
 # macOS
 .DS_Store

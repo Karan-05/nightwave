@@ -32,6 +32,8 @@ from pathlib import Path
 from nightwave.agent import Answer, Citation
 from nightwave.agent import answer as answer_single
 from nightwave.case import load_case_json
+from nightwave.multiagent.state import DraftCitation
+from nightwave.multiagent.subagents.critic import _excerpt_grounded
 
 QUESTIONS_PATH = Path(__file__).resolve().parent.parent.parent / "questions.json"
 REPORT_PATH = Path(__file__).resolve().parent.parent / "eval_report.json"
@@ -109,14 +111,28 @@ def score_correctness(ans: Answer, expected: dict) -> dict:
     topic_hits = [t for t in topics if _topic_match(t)]
     topic_score = len(topic_hits) / len(topics) if topics else 1.0
 
-    # Q3: check min_actions count via numbered/bulleted items
+    # Q3: check action count via numbered/bulleted items or markdown headings.
     min_actions = expected.get("min_actions", 0)
+    max_actions = expected.get("max_actions")
     action_ok = True
-    if min_actions:
-        count = len(re.findall(r"(?:^|\n)\s*(?:\d+\.|[-•*])\s+\S", ans.response))
-        action_ok = count >= min_actions
+    action_count = 0
+    if min_actions or max_actions:
+        action_count = len(
+            re.findall(
+                r"(?:^|\n)\s*(?:#{1,4}\s*)?(?:(?:action\s*)?\d+(?:[.:])?|[-•*])\s+\S",
+                ans.response,
+                flags=re.IGNORECASE,
+            )
+        )
+        action_ok = action_count >= min_actions and (
+            max_actions is None or action_count <= max_actions
+        )
 
-    overall = (phrase_score + entity_score + topic_score) / 3
+    action_score = 1.0 if action_ok else 0.0
+    components = [phrase_score, entity_score, topic_score]
+    if min_actions or max_actions:
+        components.append(action_score)
+    overall = sum(components) / len(components)
 
     return {
         "phrase_score": round(phrase_score, 3),
@@ -129,6 +145,8 @@ def score_correctness(ans: Answer, expected: dict) -> dict:
         "topic_hits": topic_hits,
         "topic_misses": [t for t in topics if t not in topic_hits],
         "action_count_ok": action_ok,
+        "action_count": action_count,
+        "action_score": round(action_score, 3),
         "overall": round(overall, 3),
     }
 
@@ -140,15 +158,32 @@ def score_citation_grounding(ans: Answer) -> dict:
     """
     invalid_ids: list[str] = []
     empty_excerpts: list[str] = []
+    ungrounded_excerpts: list[str] = []
 
     for c in ans.citations:
         if c.evidence_id not in _valid_evidence_ids:
             invalid_ids.append(c.evidence_id)
         if not c.excerpt.strip():
             empty_excerpts.append(c.evidence_id)
+        elif c.evidence_id in _valid_evidence_ids and not _excerpt_grounded(
+            DraftCitation(
+                evidence_id=c.evidence_id,
+                source_path=c.source_path,
+                locator=c.locator,
+                excerpt=c.excerpt,
+                confidence=c.confidence,
+            )
+        ):
+            ungrounded_excerpts.append(c.evidence_id)
 
     total = len(ans.citations)
-    valid_count = total - len(invalid_ids)
+    valid_count = sum(
+        1
+        for c in ans.citations
+        if c.evidence_id in _valid_evidence_ids
+        and c.excerpt.strip()
+        and c.evidence_id not in ungrounded_excerpts
+    )
     grounding_score = valid_count / total if total > 0 else 0.0
 
     return {
@@ -156,6 +191,7 @@ def score_citation_grounding(ans: Answer) -> dict:
         "valid_citations": valid_count,
         "invalid_evidence_ids": invalid_ids,
         "empty_excerpts": empty_excerpts,
+        "ungrounded_excerpts": ungrounded_excerpts,
         "hallucinated": len(invalid_ids) > 0,
         "grounding_score": round(grounding_score, 3),
     }
@@ -164,17 +200,27 @@ def score_citation_grounding(ans: Answer) -> dict:
 def score_must_cite(ans: Answer, expected: dict) -> dict:
     """Check that required evidence IDs (from expected) appear in the agent's citations."""
     cited_ids = {c.evidence_id for c in ans.citations}
-    # Also check if the ID or hypothesis ID appears in the response text
-    required: list[str] = expected.get("must_cite_evidence_ids", []) + expected.get(
+    required_evidence: list[str] = expected.get("must_cite_evidence_ids", [])
+    required_evidence_or_hypotheses: list[str] = expected.get(
         "must_cite_evidence_or_hypotheses", []
     )
-    hits = [r for r in required if r in cited_ids or r in ans.response]
+    required = required_evidence + required_evidence_or_hypotheses
+    forbidden_citations: list[str] = expected.get("must_not_cite", [])
+    forbidden_hits = [
+        evidence_id for evidence_id in forbidden_citations if evidence_id in cited_ids
+    ]
+    hits = [r for r in required_evidence if r in cited_ids] + [
+        r for r in required_evidence_or_hypotheses if r in cited_ids or r in ans.response
+    ]
     score = len(hits) / len(required) if required else 1.0
+    if forbidden_hits:
+        score = 0.0
 
     return {
         "required": required,
         "hits": hits,
         "misses": [r for r in required if r not in hits],
+        "forbidden_citation_hits": forbidden_hits,
         "score": round(score, 3),
     }
 
@@ -184,6 +230,8 @@ def score_confidence_calibration(ans: Answer, expected: dict) -> dict:
 
     if "confidence_range" in expected:
         lo, hi = expected["confidence_range"]
+        if "max_confidence" in expected:
+            hi = min(hi, expected["max_confidence"])
         in_range = lo <= conf <= hi
         midpoint = (lo + hi) / 2
         # Partial credit: how far outside the range is the confidence?
@@ -192,6 +240,17 @@ def score_confidence_calibration(ans: Answer, expected: dict) -> dict:
             "confidence": conf,
             "expected_range": [lo, hi],
             "in_range": in_range,
+            "calibration_score": round(cal_score, 3),
+        }
+
+    if "max_confidence" in expected:
+        max_c = expected["max_confidence"]
+        below_max = conf <= max_c
+        cal_score = 1.0 if below_max else max(0.0, 1.0 - (conf - max_c) * 2)
+        return {
+            "confidence": conf,
+            "max_confidence": max_c,
+            "below_max": below_max,
             "calibration_score": round(cal_score, 3),
         }
 
@@ -209,12 +268,25 @@ def score_confidence_calibration(ans: Answer, expected: dict) -> dict:
     return {"confidence": conf, "calibration_score": 1.0}
 
 
+def score_adversarial_constraints(ans: Answer, expected: dict) -> dict:
+    text = ans.response.lower()
+    forbidden_phrases: list[str] = expected.get("forbidden_phrases", [])
+    forbidden_hits = [phrase for phrase in forbidden_phrases if phrase.lower() in text]
+    score = 0.0 if forbidden_hits else 1.0
+    return {
+        "forbidden_phrases": forbidden_phrases,
+        "forbidden_hits": forbidden_hits,
+        "score": score,
+    }
+
+
 def score_question(ans: Answer, q: dict) -> dict:
     expected = q["expected"]
     correctness = score_correctness(ans, expected)
     grounding = score_citation_grounding(ans)
     must_cite = score_must_cite(ans, expected)
     calibration = score_confidence_calibration(ans, expected)
+    adversarial = score_adversarial_constraints(ans, expected)
 
     overall = (
         correctness["overall"] * 0.35
@@ -222,6 +294,7 @@ def score_question(ans: Answer, q: dict) -> dict:
         + must_cite["score"] * 0.20
         + calibration["calibration_score"] * 0.15
     )
+    overall *= adversarial["score"]
 
     # Hard penalty for hallucinated citations — the primary failure mode
     if grounding["hallucinated"]:
@@ -248,6 +321,7 @@ def score_question(ans: Answer, q: dict) -> dict:
             "citation_grounding": grounding,
             "must_cite": must_cite,
             "confidence_calibration": calibration,
+            "adversarial_constraints": adversarial,
             "overall": round(overall, 3),
         },
     }
@@ -331,13 +405,12 @@ def run_eval(use_cache: bool = False) -> dict:
     cached_answers: dict[str, Answer] = {}
     if use_cache:
         if not RAW_ANSWERS_PATH.exists():
-            raise FileNotFoundError(
-                f"{RAW_ANSWERS_PATH} not found. Run without --cached first."
-            )
+            raise FileNotFoundError(f"{RAW_ANSWERS_PATH} not found. Run without --cached first.")
         cached_answers = _deserialize_answers(RAW_ANSWERS_PATH.read_text())
     else:
         collected: list[tuple[str, Answer]] = []
         if architecture == "single":
+
             def answer_fn(question: str, question_id: str) -> Answer:
                 return answer_single(question)
 
@@ -369,10 +442,12 @@ def run_eval(use_cache: bool = False) -> dict:
         print(f"  confidence : {ans.confidence:.2f}")
         print(f"  citations  : {len(ans.citations)}")
         print(f"  overall    : {s['overall']:.3f}")
-        print(f"  correct    : {s['correctness']['overall']:.3f}  "
-              f"grounding: {s['citation_grounding']['grounding_score']:.3f}  "
-              f"must-cite: {s['must_cite']['score']:.3f}  "
-              f"calibration: {s['confidence_calibration']['calibration_score']:.3f}")
+        print(
+            f"  correct    : {s['correctness']['overall']:.3f}  "
+            f"grounding: {s['citation_grounding']['grounding_score']:.3f}  "
+            f"must-cite: {s['must_cite']['score']:.3f}  "
+            f"calibration: {s['confidence_calibration']['calibration_score']:.3f}"
+        )
 
         if s["citation_grounding"]["hallucinated"]:
             print(f"  ⚠ HALLUCINATED IDs: {s['citation_grounding']['invalid_evidence_ids']}")

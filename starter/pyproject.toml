@@ -21,6 +21,15 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.10",
 ]
+openai = ["openai>=1.40"]
+gemini = ["google-generativeai>=0.8"]
+bedrock = ["boto3>=1.34"]
+ollama = ["openai>=1.40"]
+providers = [
+    "openai>=1.40",
+    "google-generativeai>=0.8",
+    "boto3>=1.34",
+]
 
 [tool.ruff]
 line-length = 100

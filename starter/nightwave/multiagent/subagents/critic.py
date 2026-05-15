@@ -21,11 +21,13 @@ from __future__ import annotations
 import re
 
 from nightwave.case import DEFAULT_EVIDENCE_DIR
+from nightwave.multiagent.claim_verifier import verify_claim_coverage
 from nightwave.multiagent.state import AgentState, DraftCitation
 from nightwave.tools import _INDEX
 
 try:
     from pypdf import PdfReader
+
     _HAS_PYPDF = True
 except ImportError:
     _HAS_PYPDF = False
@@ -39,6 +41,21 @@ def _load_source_text(ev_id: str, locator: dict) -> str:
 
     filename = ev.get("filename", "")
     path = DEFAULT_EVIDENCE_DIR / filename
+
+    if not locator:
+        if ev.get("mime_type") == "application/pdf":
+            if _HAS_PYPDF:
+                try:
+                    reader = PdfReader(str(path))
+                    page_text = " ".join(page.extract_text() or "" for page in reader.pages)
+                    return f"{page_text} {ev.get('description', '')} {ev.get('ai_summary', '')}"
+                except Exception:
+                    pass
+            return f"{ev.get('description', '')} {ev.get('ai_summary', '')}"
+        try:
+            return path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            return f"{ev.get('description', '')} {ev.get('ai_summary', '')}"
 
     loc_type = locator.get("type", "text")
 
@@ -62,9 +79,7 @@ def _load_source_text(ev_id: str, locator: dict) -> str:
             # Give a window ±5 lines around the locator for flexibility
             start = max(0, start - 5)
             end = min(len(lines), end + 5)
-            window = " ".join(lines[start:end])
-            full_text = " ".join(lines)
-            return f"{window} {full_text} {ev.get('description', '')} {ev.get('ai_summary', '')}"
+            return " ".join(lines[start:end])
         except Exception:
             return f"{ev.get('description', '')} {ev.get('ai_summary', '')}"
 
@@ -104,11 +119,56 @@ def _excerpt_grounded(citation: DraftCitation) -> bool:
     return False
 
 
+def _extract_inline_citation_pairs(response: str) -> list[tuple[str, str]]:
+    pattern = re.compile(
+        r"\[([a-f0-9\-]{36}):\s*['\"]?(.+?)['\"]?\]",
+        flags=re.IGNORECASE,
+    )
+    return [
+        (match.group(1).lower(), match.group(2).strip().rstrip("'\""))
+        for match in pattern.finditer(response)
+    ]
+
+
 def run_critic(state: AgentState) -> AgentState:
     """Validate state.draft_citations. Populate critic_passed / critic_feedback."""
     citations = state.draft_citations
     issues: list[str] = []
     verified_citations: list[DraftCitation] = []
+    inline_ungrounded_count = 0
+
+    if not citations and state.draft_response.strip():
+        issues.append("NO_CITATIONS — fact-bearing answer emitted without citations")
+
+    inline_pairs = _extract_inline_citation_pairs(state.draft_response)
+    inline_ids = {evidence_id for evidence_id, _excerpt in inline_pairs}
+    citation_ids = {cit.evidence_id for cit in citations}
+    missing_inline_ids = inline_ids - citation_ids
+    if missing_inline_ids:
+        issues.append(
+            "INLINE_CITATION_MISMATCH — response cites IDs missing from citations[]: "
+            + ", ".join(sorted(missing_inline_ids))
+        )
+
+    for inline_id, inline_excerpt in inline_pairs:
+        inline_citation = next((cit for cit in citations if cit.evidence_id == inline_id), None)
+        if inline_citation is None or inline_id not in _INDEX.evidence_by_id:
+            continue
+        if not _excerpt_grounded(
+            DraftCitation(
+                evidence_id=inline_id,
+                source_path=inline_citation.source_path,
+                locator=inline_citation.locator,
+                excerpt=inline_excerpt,
+                confidence=inline_citation.confidence,
+            )
+        ):
+            inline_ungrounded_count += 1
+            issues.append(
+                f"UNGROUNDED inline excerpt for '{inline_id}' — "
+                f"text not found at locator {inline_citation.locator}. "
+                f"Excerpt: '{inline_excerpt[:80]}'"
+            )
 
     for cit in citations:
         # Hard check 1: evidence_id must exist
@@ -146,30 +206,56 @@ def run_critic(state: AgentState) -> AgentState:
             "cap at 0.70 per calibration rubric"
         )
 
+    claim_coverage = verify_claim_coverage(state.draft_response, verified_citations)
+    if (
+        claim_coverage["claim_count"] >= 3
+        and claim_coverage["coverage"] < 0.55
+        and verified_citations
+    ):
+        issues.append(
+            "CLAIM_COVERAGE too low "
+            f"({claim_coverage['coverage']:.2f}) — factual claims lack citation support"
+        )
+
     # Critic decision
     ungrounded_count = sum(1 for c in verified_citations if not c.verified)
-    hard_fail = len(issues) > ungrounded_count  # hallucinated IDs = hard fail
+    total_ungrounded_count = ungrounded_count + inline_ungrounded_count
+    hard_fail = any(
+        issue.startswith(
+            (
+                "HALLUCINATED",
+                "NO_CITATIONS",
+                "INLINE_CITATION_MISMATCH",
+                "CONFIDENCE",
+                "CLAIM_COVERAGE",
+            )
+        )
+        for issue in issues
+    )
 
     state.draft_citations = verified_citations
 
     if hard_fail:
         state.critic_passed = False
         state.critic_feedback = "CRITIC HARD FAIL:\n" + "\n".join(issues)
-    elif ungrounded_count > 0:
+    elif total_ungrounded_count > 0:
         state.critic_passed = False
-        state.critic_feedback = (
-            "CRITIC SOFT FAIL (ungrounded excerpts — revise):\n" + "\n".join(issues)
+        state.critic_feedback = "CRITIC SOFT FAIL (ungrounded excerpts — revise):\n" + "\n".join(
+            issues
         )
     else:
         state.critic_passed = True
         state.critic_feedback = ""
 
-    state.trace.append({
-        "step": "critic",
-        "passed": state.critic_passed,
-        "issues": issues,
-        "verified_citations": len(verified_citations),
-        "ungrounded": ungrounded_count,
-    })
+    state.trace.append(
+        {
+            "step": "critic",
+            "passed": state.critic_passed,
+            "issues": issues,
+            "verified_citations": len(verified_citations),
+            "ungrounded": total_ungrounded_count,
+            "claim_coverage": claim_coverage,
+        }
+    )
 
     return state

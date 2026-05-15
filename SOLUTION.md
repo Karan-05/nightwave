@@ -31,11 +31,11 @@ The original single-agent ReAct harness remains available with `NIGHTWAVE_ARCHIT
 
 ### Retriever
 
-Hybrid retrieval when dependencies are available: BM25 lexical search over parsed evidence chunks, dense embeddings via `sentence-transformers`, reciprocal rank fusion for reranking. Degrades to BM25 if `numpy` or the model is unavailable — keeps the submission runnable without network access or model downloads.
+Hybrid retrieval when dependencies are available: BM25 lexical search over parsed evidence chunks, dense embeddings via `sentence-transformers`, reciprocal rank fusion for reranking. Degrades to BM25 if `numpy` or the model is unavailable — keeps the submission runnable without network access or model downloads. The evidence read model now sits behind `CaseStore` / `CaseIndex`, so the agents depend on a case-scoped storage boundary instead of directly reading a global JSON singleton.
 
 ### Graph Agent
 
-Designed around Neo4j with an in-memory fallback. Neo4j fits because the case state is relational: Madison → Josh → Session, Madison → Kyle Lawrence → Snapchat, hypotheses → supporting evidence. The seeder uses idempotent `MERGE` statements and creates `SUPPORTS` edges from `lead.source_hypothesis_id`. Final industrial run used Colima + Docker Compose to start Neo4j 5 Community; seeded the graph; verified node/edge counts; ran the eval with `graph_mode: neo4j`.
+Designed around Neo4j with an in-memory fallback. Neo4j fits because the case state is relational: Madison → Josh → Session, Madison → Kyle Lawrence → Snapchat, hypotheses → supporting evidence. The seeder uses idempotent, case-scoped `MERGE` statements, stamps `case_id` on nodes/edges, validates seeded node and relationship counts, and creates `SUPPORTS` edges from `lead.source_hypothesis_id`. Final industrial run used Colima + Docker Compose to start Neo4j 5 Community; seeded the graph; verified node/edge counts; ran the eval with `graph_mode: neo4j`.
 
 ### Synthesizer
 
@@ -43,7 +43,11 @@ Receives only retrieved evidence chunks and graph context. Uses Claude with `tem
 
 ### Critic
 
-Validates that every `evidence_id` exists in `case_data.json`, that excerpts are grounded in source text or evidence metadata, and that confidence is not over-calibrated when graph hypotheses conflict. Critic feedback stays internal trace data — earlier versions leaked warnings into the user-facing answer, which is unacceptable product behavior. If validation fails after retry, confidence is capped rather than the response polluted.
+Validates that every `evidence_id` exists in `case_data.json`, that excerpts are grounded in source text or evidence metadata, that claim coverage is high enough for fact-bearing answers, and that confidence is not over-calibrated when graph hypotheses conflict. Claim support now flows through an entailment judge interface: CI uses a deterministic lexical judge, while production can enable a dedicated NLI cross-encoder with `NIGHTWAVE_ENTAILMENT_BACKEND=cross_encoder`. Inline citations are not automatically accepted; their quoted excerpt is judged against the surrounding claim, and multi-citation claims are scored against the combined evidence set. Critic feedback stays internal trace data — earlier versions leaked warnings into the user-facing answer, which is unacceptable product behavior. If live synthesis cannot repair ungrounded or weakly covered claims, the orchestrator falls back to a deterministic evidence-backed synthesis before capping confidence.
+
+### Observability
+
+Each pipeline run writes a structured JSONL record with `run_id`, `case_id`, stage timings, token usage, cost, critic status, and full trace. A companion metrics snapshot accumulates run counts, critic failures, and stage timing count/total/avg/max under a write lock, which makes the trace useful for CI and local incident review instead of being only raw logs.
 
 ## Tool Choices
 
@@ -76,6 +80,8 @@ Q2 is intentionally moderate. The system should not claim certainty where the ca
 
 A hallucinated citation ID triggers a hard penalty. Raw answers are written to `raw_answers.json`; reports to `eval_report.json` and `eval_report_multiagent.json`.
 
+CI is wired in `.github/workflows/ci.yml`: every PR gets lint, mypy, compile, pytest, Neo4j service startup, case-scoped seed validation, and deterministic multi-agent eval against `graph_mode: neo4j`.
+
 Final result:
 
 ```text
@@ -91,21 +97,27 @@ Validation:
 ruff check .                         # passed
 mypy nightwave                       # passed
 python -m compileall nightwave tests # passed
-pytest -q --ignore=tests/test_multiagent_contract.py   # 136 passed, no LLM required
-pytest tests/test_multiagent_contract.py               # 3 passed, live Anthropic + Neo4j
+pytest -q                            # 156 passed
+python -m nightwave.multiagent.seed  # validated Neo4j case-scoped graph
+python -m nightwave.eval             # passed, overall 1.000
+python -m nightwave.multiagent.run   # passed, overall 1.000, graph_mode neo4j
 ```
 
-Test breakdown (10 files, 136 deterministic tests):
+Test breakdown (13 files, 156 deterministic tests):
 
 | File | Tests | Surface |
 |---|---:|---|
-| `test_retriever.py` | 32 | Diversity cap, classification, proper-noun/platform extraction, trace shape, k=1 |
-| `test_graph_agent.py` | 27 | Memory routing, classification priority, state shape, cap enforcement |
+| `test_retriever.py` | 33 | Diversity cap, classification, proper-noun/platform extraction, trace shape, k=1, case isolation |
+| `test_case_store.py` | 3 | CaseStore loading, unknown-case rejection, case-scoped corpus indexing |
+| `test_graph_agent.py` | 28 | Memory routing, classification priority, state shape, cap enforcement, case isolation |
+| `test_graph_db.py` | 2 | Required-Neo4j mode fails closed instead of silently using memory |
 | `test_synthesizer_json.py` | 21 | JSON parsing, null field crashes, citation dedup, confidence coercion |
 | `test_critic.py` | 11 | Hard-fail hallucination guard, soft grounding, empty excerpts, long excerpts |
-| `test_adversarial.py` | 9 | Fake IDs, prompt injection, non-existent entity, confidence capping |
-| `test_orchestrator.py` | 7 | Retry logic, confidence cap, token budget guard, no-leak of critic feedback |
-| `test_orchestrator_state.py` | 7 | State isolation, token accumulation, graph cap passthrough, mutable default safety |
+| `test_adversarial.py` | 13 | Fake IDs, prompt injection, non-existent entity, confidence capping, eval action-count integrity, claim coverage |
+| `test_entailment.py` | 3 | Entailment judge contract, dedicated-judge support, unrelated citation rejection |
+| `test_orchestrator.py` | 8 | Retry logic, deterministic fallback, confidence cap, token budget guard, no-leak of critic feedback |
+| `test_orchestrator_state.py` | 9 | State isolation, token accumulation, graph cap passthrough, mutable default safety, JSONL observability and metrics |
+| `test_multiagent_contract.py` | 3 | End-to-end multi-agent contract, calibrated Q2, prioritized Q3 leads |
 | `test_no_hardcoding.py` | 3 | AST scan: no entity IDs, Cypher args, or platform keywords in dispatch lists |
 | `test_llm_adapter.py` | 19 | Protocol conformance, factory dispatch for all 5 providers, model defaults, env-var overrides, missing-key errors |
 
@@ -128,11 +140,13 @@ NIGHTWAVE_LLM_MODEL=gpt-4o         # overrides per-provider default
 | bedrock | boto3 credential chain | `anthropic.claude-3-5-sonnet-20241022-v2:0` |
 | ollama | none (`OLLAMA_BASE_URL` for endpoint) | `llama3.2` |
 
+Provider SDKs beyond Anthropic are optional extras: install `.[openai]`, `.[gemini]`, `.[bedrock]`, `.[ollama]`, or `.[providers]` depending on which adapter you want to run.
+
 None of the adapters use native structured output modes. All five go through the same prompt-only JSON enforcement and `_extract_json` fallback, so the synthesizer validation path and critic work identically across providers.
 
 ## Scalability Bottlenecks
 
-**1. Module-level case singleton.** `_INDEX` is loaded once from a single `case_data.json`. Scaling to 100 cases requires a `CaseStore` that fetches by `case_id` from Postgres, lazy-loaded per request.
+**1. Store backend.** The runtime now has a `CaseStore` abstraction and propagates `case_id` through state, retrieval, graph queries, Neo4j seed data, and trace records. The current store is JSON-backed for the take-home; production would implement the same interface over Postgres/object storage and make evidence roots per tenant.
 
 **2. `asyncio.new_event_loop()` per question.** The orchestrator creates and discards an event loop per question. In a server context this needs to run inside a FastAPI background task queue, not spin up a new loop per call.
 
@@ -142,4 +156,4 @@ None of the adapters use native structured output modes. All five go through the
 
 1. Auto-score adversarial refusals against `acceptable_responses` / `forbidden_phrases`, gated on PR.
 2. Add locator-specific verification per citation type: PDF bbox, image bbox, video timestamp.
-3. Run Neo4j in CI; assert both Neo4j and in-memory modes on every PR.
+3. Wire orchestrator stage events to the production SSE UI contract.

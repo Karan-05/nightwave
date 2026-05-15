@@ -12,17 +12,18 @@ common LLM output formatting issues:
 from __future__ import annotations
 
 import json
+
 import pytest
 
+from nightwave.multiagent.state import RetrievedChunk
 from nightwave.multiagent.subagents.synthesizer import (
-    _extract_json,
     _extract_inline_citations,
+    _extract_json,
     _sanitize_json,
 )
-from nightwave.multiagent.state import RetrievedChunk
-
 
 # ── _sanitize_json ────────────────────────────────────────────────────────────
+
 
 def test_sanitize_json_apostrophe_escape() -> None:
     raw = r'{"key": "it\'s a test"}'
@@ -47,6 +48,7 @@ def test_sanitize_json_passthrough_valid() -> None:
 
 # ── _extract_json ─────────────────────────────────────────────────────────────
 
+
 def test_extract_json_clean_object() -> None:
     raw = '{"response": "answer", "confidence": 0.8, "reasoning": "r", "citations": []}'
     result = _extract_json(raw)
@@ -55,21 +57,29 @@ def test_extract_json_clean_object() -> None:
 
 
 def test_extract_json_markdown_fence_json() -> None:
-    raw = '```json\n{"response": "fenced", "confidence": 0.7, "reasoning": "ok", "citations": []}\n```'
+    raw = (
+        '```json\n{"response": "fenced", "confidence": 0.7, '
+        '"reasoning": "ok", "citations": []}\n```'
+    )
     result = _extract_json(raw)
     assert result["response"] == "fenced"
     assert result["confidence"] == 0.7
 
 
 def test_extract_json_markdown_fence_no_lang() -> None:
-    raw = '```\n{"response": "bare fence", "confidence": 0.6, "reasoning": "r", "citations": []}\n```'
+    raw = (
+        '```\n{"response": "bare fence", "confidence": 0.6, "reasoning": "r", "citations": []}\n```'
+    )
     result = _extract_json(raw)
     assert result["response"] == "bare fence"
 
 
 def test_extract_json_preamble_text() -> None:
     """LLM sometimes outputs explanation before the JSON object."""
-    raw = 'Here is my answer:\n{"response": "with preamble", "confidence": 0.5, "reasoning": "r", "citations": []}'
+    raw = (
+        'Here is my answer:\n{"response": "with preamble", "confidence": 0.5, '
+        '"reasoning": "r", "citations": []}'
+    )
     result = _extract_json(raw)
     assert result["response"] == "with preamble"
 
@@ -82,7 +92,10 @@ def test_extract_json_apostrophe_in_value() -> None:
 
 def test_extract_json_nested_json_value() -> None:
     """Response field contains JSON-like content that should not break parsing."""
-    inner = '{"response": "The suspect said \\"hello\\"", "confidence": 0.75, "reasoning": "quoted", "citations": []}'
+    inner = (
+        '{"response": "The suspect said \\"hello\\"", "confidence": 0.75, '
+        '"reasoning": "quoted", "citations": []}'
+    )
     result = _extract_json(inner)
     assert result["confidence"] == 0.75
 
@@ -100,29 +113,34 @@ def test_extract_json_truncated_raises() -> None:
 
 def test_extract_json_multiple_objects_returns_first() -> None:
     """When output has multiple JSON objects, return the first complete one."""
-    raw = '{"response": "first", "confidence": 0.8, "reasoning": "r", "citations": []} {"response": "second", "confidence": 0.5}'
+    raw = (
+        '{"response": "first", "confidence": 0.8, "reasoning": "r", '
+        '"citations": []} {"response": "second", "confidence": 0.5}'
+    )
     result = _extract_json(raw)
     assert result["response"] == "first"
 
 
 # ── Citation extraction integration ──────────────────────────────────────────
 
+
 def test_extract_json_citations_array() -> None:
     ev_id = "163faaac-d742-4160-aa62-070f9ecb96cb"
-    raw = json.dumps({
-        "response": f"She wore [{ev_id}: black hoodie]",
-        "confidence": 0.93,
-        "reasoning": "from alert PDF",
-        "citations": [
-            {"evidence_id": ev_id, "excerpt": "black hoodie", "confidence": 0.93}
-        ],
-    })
+    raw = json.dumps(
+        {
+            "response": f"She wore [{ev_id}: black hoodie]",
+            "confidence": 0.93,
+            "reasoning": "from alert PDF",
+            "citations": [{"evidence_id": ev_id, "excerpt": "black hoodie", "confidence": 0.93}],
+        }
+    )
     result = _extract_json(raw)
     assert result["citations"][0]["evidence_id"] == ev_id
     assert result["citations"][0]["confidence"] == 0.93
 
 
 # ── New edge cases ────────────────────────────────────────────────────────────
+
 
 # 1. Confidence as string
 def test_extract_json_confidence_as_string() -> None:
@@ -153,16 +171,17 @@ def test_extract_json_citation_null_fields_no_crash() -> None:
     and None[:400] raised TypeError.  Same for float(None).
     """
     import json as _json
+
     from nightwave.multiagent.subagents.synthesizer import _extract_json as _ej
 
-    raw = _json.dumps({
-        "response": "answer",
-        "confidence": 0.8,
-        "reasoning": "r",
-        "citations": [
-            {"evidence_id": None, "excerpt": None, "confidence": None}
-        ],
-    })
+    raw = _json.dumps(
+        {
+            "response": "answer",
+            "confidence": 0.8,
+            "reasoning": "r",
+            "citations": [{"evidence_id": None, "excerpt": None, "confidence": None}],
+        }
+    )
     parsed = _ej(raw)
     cit = parsed["citations"][0]
 
@@ -177,14 +196,14 @@ def test_extract_json_citation_null_fields_no_crash() -> None:
 # 4. Whitespace-only excerpt in citation
 def test_extract_json_whitespace_only_excerpt() -> None:
     """An excerpt that is only spaces should be accepted by _extract_json."""
-    raw = json.dumps({
-        "response": "test",
-        "confidence": 0.8,
-        "reasoning": "r",
-        "citations": [
-            {"evidence_id": "some-id", "excerpt": "   ", "confidence": 0.8}
-        ],
-    })
+    raw = json.dumps(
+        {
+            "response": "test",
+            "confidence": 0.8,
+            "reasoning": "r",
+            "citations": [{"evidence_id": "some-id", "excerpt": "   ", "confidence": 0.8}],
+        }
+    )
     result = _extract_json(raw)
     assert result["citations"][0]["excerpt"] == "   "
 
@@ -212,9 +231,7 @@ def test_extract_inline_citations_deduplicates_same_id() -> None:
         source="bm25",
     )
     chunk_index = {ev_id: chunk}
-    response_text = (
-        f"First mention [{ev_id}: text1] and second mention [{ev_id}: text2]."
-    )
+    response_text = f"First mention [{ev_id}: text1] and second mention [{ev_id}: text2]."
     results = _extract_inline_citations(response_text, chunk_index)
     # Should only have one citation despite two references to the same ID
     assert len(results) == 1
@@ -234,12 +251,14 @@ def test_extract_json_leading_trailing_whitespace() -> None:
 def test_extract_json_nested_braces_in_response_field_with_preamble() -> None:
     """When preamble forces brace-matching, a response with {curly braces} inside
     a string value must not confuse the outermost-brace extractor."""
-    inner = json.dumps({
-        "response": "answer is {unclear} and {ambiguous}",
-        "confidence": 0.5,
-        "reasoning": "r",
-        "citations": [],
-    })
+    inner = json.dumps(
+        {
+            "response": "answer is {unclear} and {ambiguous}",
+            "confidence": 0.5,
+            "reasoning": "r",
+            "citations": [],
+        }
+    )
     # Add preamble so the direct-parse path fails first and brace-matching is used
     raw = "Here is my answer:\n" + inner
     result = _extract_json(raw)
