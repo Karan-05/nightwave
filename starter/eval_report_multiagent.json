@@ -19,7 +19,7 @@
           "confidence": 0.99
         }
       ],
-      "trace_steps": 8,
+      "trace_steps": 13,
       "scores": {
         "correctness": {
           "phrase_score": 1.0,
@@ -94,7 +94,7 @@
           "confidence": 0.92
         }
       ],
-      "trace_steps": 8,
+      "trace_steps": 13,
       "scores": {
         "correctness": {
           "phrase_score": 1.0,
@@ -183,7 +183,7 @@
           "confidence": 0.99
         }
       ],
-      "trace_steps": 8,
+      "trace_steps": 13,
       "scores": {
         "correctness": {
           "phrase_score": 1.0,
