@@ -74,7 +74,11 @@ def health() -> HealthResponse:
 
 @app.post("/v1/answer", response_model=AnswerResponse)
 def answer(request: AnswerRequest) -> AnswerResponse:
-    result = answer_multi(request.question, request.question_id)
+    question = request.question.strip()
+    if not question:
+        raise HTTPException(status_code=422, detail="question must contain non-whitespace text")
+
+    result = answer_multi(question, request.question_id)
     return AnswerResponse(
         question=result.question,
         response=result.response,

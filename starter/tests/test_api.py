@@ -47,6 +47,14 @@ def test_answer_endpoint_rejects_blank_question() -> None:
     assert response.status_code == 422
 
 
+def test_answer_endpoint_rejects_whitespace_question() -> None:
+    client = TestClient(app)
+
+    response = client.post("/v1/answer", json={"question": "   ", "question_id": "empty"})
+
+    assert response.status_code == 422
+
+
 def test_eval_endpoint_rejects_when_disabled(monkeypatch) -> None:
     monkeypatch.delenv("NIGHTWAVE_ENABLE_EVAL_ENDPOINT", raising=False)
     client = TestClient(app)
