@@ -1,4 +1,88 @@
-# Nightwave Take-Home — Mini Agent Harness over a Real Case
+# Nightwave Take-Home Submission
+
+This repo contains a completed citation-governed, multi-agent investigative QA
+pipeline for the Madison Fields case. The production-shaped path uses Neo4j for
+case relationships, a FastAPI service for HTTP access, deterministic evaluation
+for repeatable review, and CI that runs lint, type checks, tests, Neo4j seeding,
+and the multi-agent eval.
+
+## Reviewer Quickstart
+
+Prerequisites:
+
+- Python 3.11+
+- Docker Compose
+- Docker Desktop or Colima
+
+From the repo root:
+
+```bash
+make setup
+make api-up
+make api-health
+make api-answer
+make api-eval
+```
+
+Expected API/eval shape:
+
+```text
+GET /health       -> ok=true, graph_mode=neo4j
+POST /v1/answer   -> cited answer with real evidence_id values
+POST /v1/eval     -> passed=true, overall_score=1.0, graph_mode=neo4j
+```
+
+The deterministic review path does not require an LLM key. Live LLM runs can be
+enabled with `ANTHROPIC_API_KEY` or another provider configured through the
+adapter described in `SOLUTION.md`.
+
+## Local Verification
+
+```bash
+make neo4j-up
+make seed
+make lint
+make typecheck
+make compile
+make test
+make eval
+```
+
+Current verified status:
+
+- GitHub Actions CI passes on `main`
+- `162` deterministic tests pass locally
+- Docker/Colima API service and Neo4j run healthy
+- Deterministic multi-agent eval passes with `overall_score: 1.000`
+- `/v1/answer` rejects blank and whitespace-only questions with `422`
+
+## Key Files
+
+- `RUNBOOK.md` - setup, Docker/API commands, Neo4j and eval operations
+- `SOLUTION.md` - architecture, tradeoffs, eval methodology, test coverage
+- `starter/nightwave/api.py` - FastAPI HTTP service
+- `starter/nightwave/multiagent/` - retriever, graph agent, synthesizer, critic
+- `.github/workflows/ci.yml` - CI with Neo4j service and deterministic eval
+
+## HTTP API
+
+```bash
+curl -fsS http://localhost:8000/health
+
+curl -fsS -X POST http://localhost:8000/v1/answer \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"What was Madison Fields wearing when last seen?","question_id":"q1"}'
+
+curl -fsS -X POST http://localhost:8000/v1/eval
+```
+
+The Docker review path intentionally enables `/v1/eval` via
+`NIGHTWAVE_ENABLE_EVAL_ENDPOINT=1`. Outside that path, the endpoint is disabled
+by default because it runs the full eval and writes a report.
+
+---
+
+# Original Nightwave Take-Home Brief
 
 Hey Karan,
 
