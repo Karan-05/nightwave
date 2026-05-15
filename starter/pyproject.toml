@@ -10,8 +10,6 @@ dependencies = [
     "anthropic>=0.40",
     "pypdf>=4.0",
     "neo4j>=5.0",                    # graph DB driver (Neo4j 5 Community via Docker)
-    "sentence-transformers>=3.0",    # all-MiniLM-L6-v2 for dense retrieval
-    "numpy>=1.26",                   # vector arithmetic for RRF
     # "openai>=1.40",                # uncomment to enable OpenAI provider
 ]
 
@@ -20,6 +18,14 @@ dev = [
     "pytest>=8",
     "ruff>=0.6",
     "mypy>=1.10",
+    "httpx>=0.27",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+]
+api = ["fastapi>=0.115", "uvicorn[standard]>=0.30"]
+dense = [
+    "sentence-transformers>=3.0",    # all-MiniLM-L6-v2 for dense retrieval
+    "numpy>=1.26",                   # vector arithmetic for RRF
 ]
 openai = ["openai>=1.40"]
 gemini = ["google-generativeai>=0.8"]
@@ -29,6 +35,12 @@ providers = [
     "openai>=1.40",
     "google-generativeai>=0.8",
     "boto3>=1.34",
+]
+prod = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sentence-transformers>=3.0",
+    "numpy>=1.26",
 ]
 
 [tool.ruff]

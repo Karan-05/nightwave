@@ -24,6 +24,47 @@ make eval
 That runs the deterministic, CI-safe path with Neo4j required. It does not need
 an LLM key.
 
+## HTTP API
+
+Start the API and Neo4j together:
+
+```bash
+make api-up
+make api-health
+make api-answer
+make api-eval
+```
+
+Manual curl examples:
+
+```bash
+curl -fsS http://localhost:8000/health
+
+curl -fsS -X POST http://localhost:8000/v1/answer \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"What was Madison Fields wearing when last seen?","question_id":"q1"}'
+
+curl -fsS -X POST http://localhost:8000/v1/eval
+```
+
+API endpoints:
+
+- `GET /health`
+- `POST /v1/answer`
+- `POST /v1/eval`
+
+The Docker API path installs the lean `.[api]` extra and disables dense
+retrieval by default, so reviewers do not need Torch/model downloads for the
+deterministic run. Compose explicitly enables `/v1/eval` with
+`NIGHTWAVE_ENABLE_EVAL_ENDPOINT=1`; outside the review path it is disabled by
+default because it runs the full eval and writes a report. For local dense
+retrieval or cross-encoder entailment:
+
+```bash
+cd starter
+python -m pip install -e ".[dense]"
+```
+
 ## Manual Setup
 
 ```bash
@@ -61,6 +102,10 @@ make typecheck     # mypy
 make compile       # compileall
 make test          # pytest
 make eval          # deterministic multi-agent eval against Neo4j
+make api-up        # build/start FastAPI + Neo4j via Docker Compose
+make api-health    # curl /health
+make api-answer    # curl /v1/answer
+make api-eval      # curl /v1/eval
 make reports       # print eval report status
 make neo4j-down    # stop Neo4j
 ```

@@ -1,4 +1,27 @@
 services:
+  api:
+    build:
+      context: ..
+      dockerfile: starter/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: nightwave
+      NIGHTWAVE_REQUIRE_NEO4J: "1"
+      NIGHTWAVE_DISABLE_DENSE: "1"
+      NIGHTWAVE_ENABLE_EVAL_ENDPOINT: "1"
+      SYNTH_MODE: deterministic
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   neo4j:
     image: neo4j:5-community
     ports:

@@ -31,7 +31,7 @@ The original single-agent ReAct harness remains available with `NIGHTWAVE_ARCHIT
 
 ### Retriever
 
-Hybrid retrieval when dependencies are available: BM25 lexical search over parsed evidence chunks, dense embeddings via `sentence-transformers`, reciprocal rank fusion for reranking. Degrades to BM25 if `numpy` or the model is unavailable — keeps the submission runnable without network access or model downloads. The evidence read model now sits behind `CaseStore` / `CaseIndex`, so the agents depend on a case-scoped storage boundary instead of directly reading a global JSON singleton.
+Hybrid retrieval when dependencies are available: BM25 lexical search over parsed evidence chunks, dense embeddings via `sentence-transformers`, reciprocal rank fusion for reranking. Degrades to BM25 if `numpy` or the model is unavailable — keeps the submission runnable without network access or model downloads. Dense retrieval is packaged as an optional extra (`.[dense]` / `.[prod]`), while the Docker API image uses the lean `.[api]` path so reviewers do not pull Torch just to run the service. The evidence read model now sits behind `CaseStore` / `CaseIndex`, so the agents depend on a case-scoped storage boundary instead of directly reading a global JSON singleton.
 
 ### Graph Agent
 
@@ -48,6 +48,10 @@ Validates that every `evidence_id` exists in `case_data.json`, that excerpts are
 ### Observability
 
 Each pipeline run writes a structured JSONL record with `run_id`, `case_id`, stage timings, token usage, cost, critic status, and full trace. A companion metrics snapshot accumulates run counts, critic failures, and stage timing count/total/avg/max under a write lock, which makes the trace useful for CI and local incident review instead of being only raw logs.
+
+### HTTP API
+
+The pipeline is exposed as a FastAPI service with `GET /health`, `POST /v1/answer`, and `POST /v1/eval`. Docker Compose can run both the API and Neo4j (`make api-up`), and the runbook includes curl examples for the Nightwave review path. `/v1/eval` is disabled unless `NIGHTWAVE_ENABLE_EVAL_ENDPOINT=1`, so the review container exposes it intentionally while default API usage avoids an unauthenticated state-mutating eval route.
 
 ## Tool Choices
 
@@ -97,13 +101,15 @@ Validation:
 ruff check .                         # passed
 mypy nightwave                       # passed
 python -m compileall nightwave tests # passed
-pytest -q                            # 156 passed
+pytest -q                            # 160 passed
 python -m nightwave.multiagent.seed  # validated Neo4j case-scoped graph
 python -m nightwave.eval             # passed, overall 1.000
 python -m nightwave.multiagent.run   # passed, overall 1.000, graph_mode neo4j
+curl /health, /v1/answer, /v1/eval   # passed through Docker FastAPI service
+blank /v1/answer request             # rejected with 422
 ```
 
-Test breakdown (13 files, 156 deterministic tests):
+Test breakdown (14 files, 161 deterministic tests):
 
 | File | Tests | Surface |
 |---|---:|---|
@@ -118,6 +124,7 @@ Test breakdown (13 files, 156 deterministic tests):
 | `test_orchestrator.py` | 8 | Retry logic, deterministic fallback, confidence cap, token budget guard, no-leak of critic feedback |
 | `test_orchestrator_state.py` | 9 | State isolation, token accumulation, graph cap passthrough, mutable default safety, JSONL observability and metrics |
 | `test_multiagent_contract.py` | 3 | End-to-end multi-agent contract, calibrated Q2, prioritized Q3 leads |
+| `test_api.py` | 5 | FastAPI health, answer contract, validation failure, eval endpoint guard and success path |
 | `test_no_hardcoding.py` | 3 | AST scan: no entity IDs, Cypher args, or platform keywords in dispatch lists |
 | `test_llm_adapter.py` | 19 | Protocol conformance, factory dispatch for all 5 providers, model defaults, env-var overrides, missing-key errors |
 

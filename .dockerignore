@@ -1,0 +1,17 @@
+.git
+.pytest_cache
+.ruff_cache
+.mypy_cache
+__pycache__
+*.pyc
+starter/.venv
+starter/*.egg-info
+starter/eval_report*.json
+starter/raw_answers.json
+starter/agent_trace*.jsonl
+starter/agent_metrics*.json
+starter/nightwave.db
+.env
+*.env
+*.log
+.DS_Store

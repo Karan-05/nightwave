@@ -10,6 +10,7 @@ fast enough for <1000 chunks at <1ms query time.
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any
 
@@ -46,8 +47,11 @@ def _load_model():
 
 def build_index() -> None:
     """Embed the full corpus. Called lazily on first query."""
-    global _embeddings, _corpus_snapshot
+    global _dense_disabled_reason, _embeddings, _corpus_snapshot
     if _dense_disabled_reason is not None:
+        raise RuntimeError(_dense_disabled_reason)
+    if os.getenv("NIGHTWAVE_DISABLE_DENSE", "").lower() in {"1", "true", "yes"}:
+        _dense_disabled_reason = "dense retrieval disabled by NIGHTWAVE_DISABLE_DENSE"
         raise RuntimeError(_dense_disabled_reason)
     if _embeddings is not None:
         return
@@ -106,8 +110,11 @@ def hybrid_search(query: str, k: int = 8, case_id: str | None = None) -> list[di
         source = "rrf"
     except Exception as exc:
         global _dense_disabled_reason
-        _dense_disabled_reason = str(exc)
-        print(f"[vector_store] Dense retrieval unavailable ({exc}); using BM25 only")
+        reason = str(exc)
+        first_failure = _dense_disabled_reason != reason
+        _dense_disabled_reason = reason
+        if first_failure:
+            print(f"[vector_store] Dense retrieval unavailable ({reason}); using BM25 only")
         if not bm25_ranked:
             return []
         rankings = [bm25_ranked]
