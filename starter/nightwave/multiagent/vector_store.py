@@ -20,7 +20,7 @@ _RRF_K = 60
 _MODEL_NAME = "all-MiniLM-L6-v2"
 
 try:
-    import numpy as np
+    import numpy as np  # type: ignore[import-not-found]
 
     _HAS_NUMPY = True
 except ImportError:
@@ -36,7 +36,7 @@ _dense_disabled_reason: str | None = None
 def _load_model():
     global _model
     if _model is None:
-        from sentence_transformers import SentenceTransformer
+        from sentence_transformers import SentenceTransformer  # type: ignore[import-not-found]
 
         print(f"[vector_store] Loading {_MODEL_NAME}…")
         t0 = time.time()

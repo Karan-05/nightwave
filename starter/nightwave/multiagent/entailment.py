@@ -71,7 +71,7 @@ class CrossEncoderEntailmentJudge:
         threshold: float = 0.62,
         entailment_index: int = 1,
     ) -> None:
-        from sentence_transformers import CrossEncoder
+        from sentence_transformers import CrossEncoder  # type: ignore[import-not-found]
 
         self._model = CrossEncoder(model_name)
         self._threshold = threshold

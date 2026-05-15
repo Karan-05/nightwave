@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from nightwave.api import app
+from nightwave.multiagent import run as run_module
 
 
 def test_health_endpoint() -> None:
@@ -55,9 +56,10 @@ def test_eval_endpoint_rejects_when_disabled(monkeypatch) -> None:
     assert response.status_code == 403
 
 
-def test_eval_endpoint_returns_multiagent_report(monkeypatch) -> None:
+def test_eval_endpoint_returns_multiagent_report(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("SYNTH_MODE", "deterministic")
     monkeypatch.setenv("NIGHTWAVE_ENABLE_EVAL_ENDPOINT", "1")
+    monkeypatch.setattr(run_module, "MULTI_REPORT_PATH", tmp_path / "eval_report_multiagent.json")
     client = TestClient(app)
 
     response = client.post("/v1/eval")
